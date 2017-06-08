@@ -31,6 +31,10 @@ class AliTRDCalDCSv2 : public TNamed {
   virtual ~AliTRDCalDCSv2() { };
 
   void    EvaluateGlobalParameters();
+  void    ForcePluralityConfig();
+  template <typename T>
+    T GetPluralityOf(T (AliTRDCalDCSFEEv2::*fct)() const);
+
   void    SetFEEArr(TObjArray * const fa)      { fFEEArr              = fa;    }
   void    SetPTRArr(TObjArray * const pa)      { fPTRArr              = pa;    }
   void    SetGTUObj(AliTRDCalDCSGTU *go)       { fGTUObj              = go;    }
