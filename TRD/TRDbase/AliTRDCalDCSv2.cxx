@@ -21,6 +21,11 @@
 //                                                                           //
 ///////////////////////////////////////////////////////////////////////////////
 
+#include <iostream>
+#include <iomanip>
+#include <map>
+#include <algorithm>
+#include <AliLog.h>
 #include "AliTRDCalDCSv2.h"
 #include "AliTRDCalDCSFEEv2.h"
 #include "AliTRDCalDCSGTU.h"
@@ -202,5 +207,131 @@ void AliTRDCalDCSv2::EvaluateGlobalParameters()
     }
   }
 }
+//_________________________________________________________
+template <typename T>
+T AliTRDCalDCSv2::GetPluralityOf(T (AliTRDCalDCSFEEv2::*fct)() const){
+  //
+  // Calls the function fct on each element of the FEE array and
+  // determines the plurality of the return values of type T
+  //
+  std::map<const T,Int_t> map;
+  // Loop over all chambers
+  const Int_t ndcs = TMath::Min(GetFEEArr()?GetFEEArr()->GetSize():0,540);
+  for(Int_t idcs=0;idcs<ndcs;idcs++) {
+    // Get the config name of this FEE
+    const AliTRDCalDCSFEEv2 *fee = GetCalDCSFEEObj(idcs);
+    if(!fee)continue;
+    const T cfg = (fee->*fct)();
+    // We try to insert the cfg with one occurence
+    auto p = map.insert(std::make_pair(cfg,1));
+    // p is a pair of <element, bool> where bool indicates
+    //  whether insertion was a) successful - nothing to do
+    //  or b) unsuccessful - we increment the counter of the
+    //  returned object which is the object which prevented
+    //  insertion (because it has the same key/cfg value)
+    if(!p.second){
+      p.first->second++;
+    }
+  } // chambers
 
+  // Get the config value with the plurality, i.e. the config
+  //  which is applied the most numerous. For this we create
+  //  a multimap with number of occurrences - config value. A
+  //  multimap (instead of a map) is needed as multiple con-
+  //  fig values might have the same number of occurrence.
+  std::multimap<Int_t, const T,std::greater<Int_t>> rmap;
+  std::transform(map.cbegin(), map.cend(),
+                 std::inserter(rmap, rmap.begin()),
+                 [](const std::pair<const T,Int_t> &org)
+                   ->std::pair<Int_t,const T>{
+                   return std::make_pair(org.second,org.first);} );
+  // Print
+  AliInfoStream() << "# occurences" << " - " << "config value" << "\n";
+  for(auto e:rmap){
+    AliInfoStream() <<  std::setw(12) << std::setfill(' ') << // pad integer with ' ' to twelve characters
+      e.first << " - " << e.second << "\n";
+  }
+  // Return most numerous config value
+  return rmap.cbegin()->second;
+  //rslt = rmap.cbegin()->second;
+
+}
+//_________________________________________________________
+void AliTRDCalDCSv2::ForcePluralityConfig() {
+  //
+  // WARNING DO NOT USE THIS FUNCTION LIGHTLY
+  //  This sets the global configuration to
+  //  the configuration of the plurality of
+  //  chambers. This means chambers which do
+  //  not belong to the plurality are recon-
+  //  structed with a WRONG configuration
+  //
+
+  AliInfoStream()
+    << " ---- Global Configuration Before Fixing ---- \n"
+    << "fGNumberOfTimeBins    - " << fGNumberOfTimeBins << "\n"
+    << "fGConfigTag           - " << fGConfigTag << "\n"
+    << "fGSingleHitThres      - " << fGSingleHitThres << "\n"
+    << "fGThreePadClustThres  - " << fGThreePadClustThres << "\n"
+    << "fGSelNoZS             - " << fGSelNoZS << "\n"
+    << "fGTCFilterWeight      - " << fGTCFilterWeight << "\n"
+    << "fGTCFilterShortDecPar - " << fGTCFilterShortDecPar << "\n"
+    << "fGTCFilterLongDecPar  - " << fGTCFilterLongDecPar << "\n"
+    << "fGFastStatNoise       - " << fGFastStatNoise << "\n"
+    << "fGConfigVersion       - " << fGConfigVersion << "\n"
+    << "fGConfigName          - " << fGConfigName << "\n"
+    << "fGFilterType          - " << fGFilterType << "\n"
+    << "fGReadoutParam        - " << fGReadoutParam << "\n"
+    << "fGTestPattern         - " << fGTestPattern << "\n"
+    << "fGTrackletMode        - " << fGTrackletMode << "\n"
+    << "fGTrackletDef         - " << fGTrackletDef << "\n"
+    << "fGTriggerSetup        - " << fGTriggerSetup << "\n"
+    << "fGAddOptions          - " << fGAddOptions << "\n"
+    << " -------------------------------------------- \n";
+  // bal
+ 
+  fGNumberOfTimeBins    = GetPluralityOf(&AliTRDCalDCSFEEv2::GetNumberOfTimeBins);
+  fGNumberOfTimeBins    = GetPluralityOf(&AliTRDCalDCSFEEv2::GetNumberOfTimeBins);
+  fGConfigTag           = GetPluralityOf(&AliTRDCalDCSFEEv2::GetConfigTag);
+  fGSingleHitThres      = GetPluralityOf(&AliTRDCalDCSFEEv2::GetSingleHitThres);
+  fGThreePadClustThres  = GetPluralityOf(&AliTRDCalDCSFEEv2::GetThreePadClustThres);
+  fGSelNoZS             = GetPluralityOf(&AliTRDCalDCSFEEv2::GetSelectiveNoZS);
+  fGTCFilterWeight      = GetPluralityOf(&AliTRDCalDCSFEEv2::GetTCFilterWeight);
+  fGTCFilterShortDecPar = GetPluralityOf(&AliTRDCalDCSFEEv2::GetTCFilterShortDecPar);
+  fGTCFilterLongDecPar  = GetPluralityOf(&AliTRDCalDCSFEEv2::GetTCFilterLongDecPar);
+  fGFastStatNoise       = GetPluralityOf(&AliTRDCalDCSFEEv2::GetFastStatNoise);
+  fGConfigVersion       = GetPluralityOf(&AliTRDCalDCSFEEv2::GetConfigVersion);
+  fGConfigName          = GetPluralityOf(&AliTRDCalDCSFEEv2::GetConfigName);
+  fGFilterType          = GetPluralityOf(&AliTRDCalDCSFEEv2::GetFilterType);
+  fGReadoutParam        = GetPluralityOf(&AliTRDCalDCSFEEv2::GetReadoutParam);
+  fGTestPattern         = GetPluralityOf(&AliTRDCalDCSFEEv2::GetTestPattern);
+  fGTrackletMode        = GetPluralityOf(&AliTRDCalDCSFEEv2::GetTrackletMode);
+  fGTrackletDef         = GetPluralityOf(&AliTRDCalDCSFEEv2::GetTrackletDef);
+  fGTriggerSetup        = GetPluralityOf(&AliTRDCalDCSFEEv2::GetTriggerSetup);
+  fGAddOptions          = GetPluralityOf(&AliTRDCalDCSFEEv2::GetAddOptions);
+
+       
+  AliInfoStream()
+    << " ---- Global Configuration After Fixing  ---- \n"
+    << "fGNumberOfTimeBins    - " << fGNumberOfTimeBins << "\n"
+    << "fGConfigTag           - " << fGConfigTag << "\n"
+    << "fGSingleHitThres      - " << fGSingleHitThres << "\n"
+    << "fGThreePadClustThres  - " << fGThreePadClustThres << "\n"
+    << "fGSelNoZS             - " << fGSelNoZS << "\n"
+    << "fGTCFilterWeight      - " << fGTCFilterWeight << "\n"
+    << "fGTCFilterShortDecPar - " << fGTCFilterShortDecPar << "\n"
+    << "fGTCFilterLongDecPar  - " << fGTCFilterLongDecPar << "\n"
+    << "fGFastStatNoise       - " << fGFastStatNoise << "\n"
+    << "fGConfigVersion       - " << fGConfigVersion << "\n"
+    << "fGConfigName          - " << fGConfigName << "\n"
+    << "fGFilterType          - " << fGFilterType << "\n"
+    << "fGReadoutParam        - " << fGReadoutParam << "\n"
+    << "fGTestPattern         - " << fGTestPattern << "\n"
+    << "fGTrackletMode        - " << fGTrackletMode << "\n"
+    << "fGTrackletDef         - " << fGTrackletDef << "\n"
+    << "fGTriggerSetup        - " << fGTriggerSetup << "\n"
+    << "fGAddOptions          - " << fGAddOptions << "\n"
+    << " -------------------------------------------- \n";
+  
+}
 
