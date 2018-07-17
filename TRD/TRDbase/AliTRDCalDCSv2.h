@@ -30,6 +30,9 @@ class AliTRDCalDCSv2 : public TNamed {
   AliTRDCalDCSv2 &operator=(const AliTRDCalDCSv2 &cd);
   virtual ~AliTRDCalDCSv2() { };
 
+  void Print(const Option_t *opt);
+
+  
   void    EvaluateGlobalParameters();
   void    ForcePluralityConfig();
   template <typename T>

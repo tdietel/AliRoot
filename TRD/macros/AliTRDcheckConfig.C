@@ -558,9 +558,23 @@ void WrappedAliTRDcheckConfig(Int_t runNr, const char *pathfile,TFile *f){
   } else {
     cout<<"    I didn't notice any errors, but that doesn't mean there weren't any!" << endl;
   }
-//______________________________________________________________________
 }
-void AliTRDcheckConfig(Int_t runNr=0, const char *pathfile="nopathgiven"){
+//______________________________________________________________________
+void AliTRDcheckConfig(){
+
+  cout << "AliTRDcheckConfig: check TRD configuration in OCDB" << endl
+       << endl
+       << "   usage: " << endl
+       << "      checkConfig(<run no>, <path>)"
+       << "  -   print summary of one run"
+       << endl
+       << "      checkYear(<year>, <path>)"
+       << "  -   check all runs in one year"
+       << endl;
+
+}
+//______________________________________________________________________
+  void checkConfig(Int_t runNr=0, const char *pathfile="nopathgiven"){
   // Wrapping the function to be able to clean up
   TFile *f=0;
   WrappedAliTRDcheckConfig(runNr,pathfile,f);

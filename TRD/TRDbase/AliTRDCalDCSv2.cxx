@@ -144,6 +144,32 @@ AliTRDCalDCSv2 &AliTRDCalDCSv2::operator=(const AliTRDCalDCSv2 &cd)
 }
 
 //_____________________________________________________________________________
+void AliTRDCalDCSv2::Print(const Option_t *opt)
+{
+
+  printf("===============================================================\n");
+  printf(" DCS FEE Configuration\n");
+  printf("===============================================================\n");
+  
+  for(Int_t i=0; i<540; i++) {
+    AliTRDCalDCSFEEv2 *iDCSFEEObj;
+    iDCSFEEObj = GetCalDCSFEEObj(i);
+    if(iDCSFEEObj != NULL) {
+      if(iDCSFEEObj->GetStatusBit() == 0) {
+
+	print("%03d -- %02d_%d_%d: ", i, i/30, (i%30)/6, i%6);
+	print("%s:%s\n",
+	      iDCSFEEObj->GetConfigName(),
+	      iDCSFEEObj->GetConfigVersion());
+      }
+    }
+  }
+	
+}
+
+
+
+//_____________________________________________________________________________
 void AliTRDCalDCSv2::EvaluateGlobalParameters()
 {
   //
