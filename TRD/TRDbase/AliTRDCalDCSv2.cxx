@@ -24,6 +24,9 @@
 #include "AliTRDCalDCSv2.h"
 #include "AliTRDCalDCSFEEv2.h"
 #include "AliTRDCalDCSGTU.h"
+#include "AliLog.h"
+
+
 
 ClassImp(AliTRDCalDCSv2)
   
@@ -137,6 +140,33 @@ AliTRDCalDCSv2 &AliTRDCalDCSv2::operator=(const AliTRDCalDCSv2 &cd)
   new (this) AliTRDCalDCSv2(cd);
   return *this;
 }
+
+//_____________________________________________________________________________
+void AliTRDCalDCSv2::Print(Option_t *option) const
+{
+  AliInfo(Form("Run duration: %d - %d (%d sec)",
+	       fStartTime, fEndTime, fEndTime-fStartTime));
+  
+
+  for(Int_t i=0; i<540; i++) {
+    AliTRDCalDCSFEEv2 *iDCSFEEObj = GetCalDCSFEEObj(i);
+    if(iDCSFEEObj == NULL) continue;
+
+    if(iDCSFEEObj->GetStatusBit() != 0) {
+      AliWarning(Form("status bit of DCS FEE object [%d] is set", i));
+      continue;
+    }
+    
+    AliInfo(Form("%02d_%d_%d [%03d]: config = %s : %s",
+		 i/30, (i%30)/6, i%6, i,
+		 iDCSFEEObj->GetConfigName().Data(),
+		 iDCSFEEObj->GetConfigVersion().Data()
+		 ));
+  }
+}
+
+
+
 
 //_____________________________________________________________________________
 void AliTRDCalDCSv2::EvaluateGlobalParameters()

@@ -30,6 +30,8 @@ class AliTRDCalDCSv2 : public TNamed {
   AliTRDCalDCSv2 &operator=(const AliTRDCalDCSv2 &cd);
   virtual ~AliTRDCalDCSv2() { };
 
+  virtual void Print(Option_t *option="") const;
+  
   void    EvaluateGlobalParameters();
   void    SetFEEArr(TObjArray * const fa)      { fFEEArr              = fa;    }
   void    SetPTRArr(TObjArray * const pa)      { fPTRArr              = pa;    }
