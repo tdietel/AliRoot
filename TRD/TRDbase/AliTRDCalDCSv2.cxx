@@ -27,6 +27,7 @@
 #include "AliLog.h"
 
 #include <iostream>
+#include <iomanip>
 
 #include <TH1.h>
 
@@ -215,10 +216,18 @@ TH1F* AliTRDCalDCSv2::CreatePluralityHistogram(TString (AliTRDCalDCSFEEv2::*fct)
   // Code based on an example on alphanumeric labels in the ROOT docs, see:
   // https://root.cern.ch/doc/master/hlabels1_8C.html
 
-  // create the histogram and enable automatic extension 
+
+#if ROOT_VERSION_CODE >= ROOT_VERSION(6,0,0)
+  // in root 6, we can enable automatic extension
   TH1F *h = new TH1F("h","test",3,0.0,3.0);
+  h->SetCanExtend(TH1::kAllAxes);
+#else
+  // create the histogram with (hopefully) enough bins
+  TH1F *h = new TH1F("h","test",100,0.0,100.0);
+#endif
+  
   h->SetStats(0); // disable statistics display
-  h->SetCanExtend(TH1::kAllAxes); // 
+
   
   // loop over all 540 chambers
   for(Int_t i=0; i<540; i++) {
