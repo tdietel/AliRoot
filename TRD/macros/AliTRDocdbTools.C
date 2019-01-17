@@ -269,11 +269,16 @@ void fix_mixed_config(Int_t run, TString jira)
   TObjArray *objArrayCDB = (TObjArray*)entry->GetObject();
   AliTRDCalDCSv2 *caldcsSOR  = (AliTRDCalDCSv2 *)objArrayCDB->At(0);
   AliTRDCalDCSv2 *caldcsEOR  = (AliTRDCalDCSv2 *)objArrayCDB->At(1);
-   
+
+  //cout << caldcsSOR->GetGlobalConfigName() << endl;
+  //cout << caldcsEOR->GetGlobalConfigName() << endl;
+  
   // Fix mixed configuration
-  if(caldcsSOR->GetGlobalConfigName().Contains("mixed") ||
-     caldcsEOR->GetGlobalConfigName().Contains("mixed") ){
-    
+  if( caldcsSOR->GetGlobalConfigName().Contains("mixed") ||
+      caldcsSOR->GetGlobalConfigVersion().Contains("mixed") ||
+      caldcsEOR->GetGlobalConfigName().Contains("mixed") ||
+      caldcsEOR->GetGlobalConfigVersion().Contains("mixed") ){
+
     caldcsSOR->ForceOverwritePluralityConfig();
     caldcsEOR->ForceOverwritePluralityConfig();
 
