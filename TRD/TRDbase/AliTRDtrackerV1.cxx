@@ -4689,4 +4689,5 @@ Int_t           AliTRDtrackerV1::FollowInterpolationsTPCTOF(AliESDtrack &esdTrac
                    "\n";
     }
   }
+  return 0;
 }
