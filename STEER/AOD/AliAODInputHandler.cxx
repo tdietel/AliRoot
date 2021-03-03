@@ -106,7 +106,8 @@ Bool_t AliAODInputHandler::Init(TTree* tree, Option_t* opt)
 
     fTree = tree;
     if (!fTree) return kFALSE;
-    fTree->GetEntries();
+    GetEntries();
+
     ConnectFriends();
 
     SwitchOffBranches();

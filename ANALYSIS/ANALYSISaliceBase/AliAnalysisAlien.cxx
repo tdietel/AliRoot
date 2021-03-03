@@ -4457,6 +4457,7 @@ void AliAnalysisAlien::WriteAnalysisMacro(Long64_t nentries, Long64_t firstentry
             out << "      while ((cfriend=(TChain*)nextfriend())) {" << endl;
             out << "         fileFriend = bpath;" << endl;
             out << "         fileFriend += cfriend->GetTitle();" << endl;
+#if ROOT_VERSION_CODE < ROOT_VERSION(5,99,99)
             out << "         TFile *file = TFile::Open(fileFriend);" << endl;
             out << "         if (file) {" << endl;
             out << "            file->Close();" << endl;
@@ -4465,6 +4466,11 @@ void AliAnalysisAlien::WriteAnalysisMacro(Long64_t nentries, Long64_t firstentry
             out << "            ::Fatal(\"CreateChain\", \"Cannot open friend file: %s\", fileFriend.Data());" << endl;
             out << "            return 0;" << endl;
             out << "         }" << endl;
+#else
+            // No need to check the friend chain files individually, we can use later-on in ROOT6
+            // the open status stored in each chain after calling TChain::GetEntries
+            out << "         cfriend->Add(fileFriend.Data());" << endl;
+#endif
             out << "      }" << endl;
          }
          out << "   }" << endl;
@@ -4474,7 +4480,7 @@ void AliAnalysisAlien::WriteAnalysisMacro(Long64_t nentries, Long64_t firstentry
          out << "   }" << endl;
          out << "   return chain;" << endl;
          out << "}" << endl << endl;
-      }   
+      }
       if (hasANALYSISalice) {
          out <<"//________________________________________________________________________________" << endl;
          out << "Bool_t SetupPar(const char *package) {" << endl;

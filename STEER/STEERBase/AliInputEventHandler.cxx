@@ -21,6 +21,9 @@
 //-------------------------------------------------------------------------
 
 #include <TObjString.h>
+#include <TChain.h>
+#include <TChainElement.h>
+#include <TFriendElement.h>
 #include "AliInputEventHandler.h"
 #include "AliVEvent.h"
 #include "AliVCuts.h"
@@ -67,6 +70,48 @@ AliInputEventHandler::AliInputEventHandler(const char* name, const char* title):
     fUserInfo(0)
 {
 // Named constructor.
+}
+
+//______________________________________________________________________________
+Long64_t AliInputEventHandler::GetEntries()
+{
+  /// Calls fTree->GetEntries and checks the file open status
+  /// Throws AliFatal if any input file could not be opened.
+  Long64_t entries = fTree->GetEntries();
+  // GetEntries tries to open internally all chain files, including the connected friend files
+  // Since open errors are not reported, we need to check the status in the TChain structure
+  // only works for ROOT6
+#if ROOT_VERSION_CODE >= ROOT_VERSION(6,0,0)
+
+  TChain *chain = dynamic_cast<TChain*>(fTree);
+  if (chain) {
+    TIter next(chain->GetListOfFiles());
+    TChainElement *elem;
+    while ((elem = (TChainElement*) next())) {
+      if (elem->GetLoadResult() != 0)
+        AliFatal(Form("File %s has status=%d", elem->GetTitle(), elem->GetLoadResult()));
+    }
+  }
+  if (fTree->GetListOfFriends()) {
+    TIter nextfriend(fTree->GetListOfFriends());
+    TFriendElement* fe = nullptr;
+    while ((fe = (TFriendElement*) nextfriend())) {
+      TTree* t = fe->GetTree();
+      TChain *chain = dynamic_cast<TChain*>(t);
+      if (chain) {
+        TIter next(chain->GetListOfFiles());
+        TChainElement *elem = nullptr;
+        while ((elem = (TChainElement*) next())) {
+          if (elem->GetLoadResult() != 0)
+            AliFatal(Form("Friend file %s has status=%d", elem->GetTitle(), elem->GetLoadResult()));
+        }
+      }
+    }
+  }
+
+#endif
+  
+  return entries;
 }
 
 //______________________________________________________________________________
