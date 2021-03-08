@@ -23,6 +23,7 @@
 #include <mutex>
 #include <string>
 #include <map>
+#include <array>
 #include <queue>
 #include <mutex>
 #include <condition_variable>
