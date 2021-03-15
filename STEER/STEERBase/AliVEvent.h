@@ -163,13 +163,14 @@ public:
   virtual Double_t  GetZDCN2Energy() const = 0;
   virtual Double_t  GetZDCP2Energy() const = 0;
   virtual Double_t  GetZDCEMEnergy(Int_t i) const = 0;
- 
+  virtual Int_t     GetNumberOfMuonTracks() const {return 0;}
   // Tracks
   virtual AliVParticle *GetTrack(Int_t i) const = 0;
   virtual AliVTrack    *GetVTrack(Int_t /*i*/) const {return NULL;}
   //virtual AliVTrack    *GetVTrack(Int_t /*i*/) {return NULL;}
   //virtual Int_t        AddTrack(const AliVParticle *t) = 0;
   virtual Int_t        GetNumberOfTracks() const = 0;
+
   virtual Int_t        GetNumberOfV0s() const = 0;
   virtual Int_t        GetNumberOfCascades() const = 0;
 
@@ -206,6 +207,10 @@ public:
   // Tracklets
   virtual AliVMultiplicity* GetMultiplicity() const {return 0;}
   virtual Int_t             GetNumberOfITSClusters(Int_t) const {return 0;}
+
+  // TPC information
+  virtual Int_t             GetNumberOfTPCClusters() const {return 0;}
+  virtual Int_t             GetNumberOfTPCTracks() const {return 0;}
 
   virtual Bool_t IsPileupFromSPDInMultBins() const {
     return kFALSE;    
