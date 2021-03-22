@@ -101,6 +101,7 @@ AliFITv8::AliFITv8()
     for (Int_t j = 0; j < nRings; j++)
       fIdV0Plus[i][j] = 0;
   }
+ 
 }
 //--------------------------------------------------------------------
 
@@ -317,7 +318,102 @@ const float AliFITv8::sDzMinRodTypes[4] = {
 
 const float AliFITv8::sCellRingRadii[10] = {4.01,  7.3,  12.9,
                                             21.25, 38.7, 72.115};
+// BEGIN: Support structure constants
+// offset found to potentially remove overlaps
 
+const Float_t AliFITv8::sEps = 0.05;
+// offset found to potentially remove overlaps
+const Float_t AliFITv8::sXoffset = 0.3027999999999995;
+const Float_t AliFITv8::sYoffset = -0.6570999999999998;
+
+// frame 1 has a longer side horizontal
+const Float_t AliFITv8::sFrame1X = 21.500;
+const Float_t AliFITv8::sFrame1Y = 13.705;
+const Float_t AliFITv8::sFrame1PosX = 7.9278 - sXoffset;
+const Float_t AliFITv8::sFrame1PosY = 9.2454 - sYoffset;
+const Float_t AliFITv8::sRect1X = 15;
+const Float_t AliFITv8::sRect1Y = 1.33;
+const Float_t AliFITv8::sRect2X = 2.9;
+const Float_t AliFITv8::sRect2Y = 12.2;
+const Float_t AliFITv8::sRect3X = 1.57;
+const Float_t AliFITv8::sRect3Y = .175;
+const Float_t AliFITv8::sRect4X = 5.65;
+const Float_t AliFITv8::sRect4Y = 1.075;
+// frame 2 has a longer side vertical
+const Float_t AliFITv8::sFrame2X = 13.930;
+const Float_t AliFITv8::sFrame2Y = 21.475;
+const Float_t AliFITv8::sFrame2PosX = 10.1428 - sXoffset;
+const Float_t AliFITv8::sFrame2PosY = -8.3446 - sYoffset;
+const Float_t AliFITv8::sRect5X = 1.33;
+const Float_t AliFITv8::sRect5Y = 12.1;
+
+const Float_t AliFITv8::sRect6X = .83;
+const Float_t AliFITv8::sRect6Y = 3.0;
+const Float_t AliFITv8::sRect7X = 13.1;
+const Float_t AliFITv8::sRect7Y = 3.0;
+const Float_t AliFITv8::sRect8X = 1.425;
+const Float_t AliFITv8::sRect8Y = 5.5;
+
+// both frame boxes are the same height
+const Float_t AliFITv8::sFrameZ = 5.700;
+const Float_t AliFITv8::sMountZ = 1.5;
+
+// PMT socket dimensions
+const Float_t AliFITv8::sPmtSide = 5.950;
+const Float_t AliFITv8::sPmtZ = 3.750;
+
+// quartz radiator socket dimensions
+const Float_t AliFITv8::sQuartzRadiatorSide = 5.350;
+const Float_t AliFITv8::sQuartzRadiatorZ = 1.950;
+//  const Float_t AliFITv8::sQuartzRadiatorSide= 5.40;
+//  const Float_t AliFITv8::sQuartzRadiatorZ= 2.0;
+// for the rounded socket corners
+const Float_t AliFITv8::sCornerRadius = .300;
+
+// bottom plates on the frame
+const Float_t AliFITv8::sPlateSide = 6.000;
+const Float_t AliFITv8::sBasicPlateZ = 0.200;
+const Float_t AliFITv8::sCablePlateZ = 0.500;
+const Float_t AliFITv8::sFiberHeadX = 0.675 * 2;
+const Float_t AliFITv8::sFiberHeadY = 0.275 * 2;
+
+// plate transformations
+const Float_t AliFITv8::sOpticalFiberPlateZ = 0.35;
+const Float_t AliFITv8::sPlateSpacing = 6.100;
+const Float_t AliFITv8::sPlateDisplacementDeltaY = 1.33;
+const Float_t AliFITv8::sPlateDisplacementX = sPlateSpacing + 0.3028;
+const Float_t AliFITv8::sPlateDisplacementY =
+    12.8789 - sPlateDisplacementDeltaY;
+const Float_t AliFITv8::sPlateGroupZ = -sFrameZ / 2 - sOpticalFiberPlateZ;
+
+// quartz & PMT socket transformations
+const Float_t AliFITv8::sQuartzHeight = -sFrameZ / 2 + sQuartzRadiatorZ / 2;
+const Float_t AliFITv8::sPmtHeight = sFrameZ / 2 - sPmtZ / 2;
+const Float_t AliFITv8::sPmtCornerTubePos = -.15;
+const Float_t AliFITv8::sPmtCornerPos = 2.825;
+const Float_t AliFITv8::sEdgeCornerPos[2] = {-6.515, -.515};
+const Float_t AliFITv8::sQuartzFrameOffsetX = -1.525;
+const Float_t AliFITv8::sPos1X[3] = {sQuartzFrameOffsetX - sPlateSpacing,
+                                     sQuartzFrameOffsetX,
+                                     sQuartzFrameOffsetX + sPlateSpacing};
+const Float_t AliFITv8::sPos1Y[4] = {3.6275, -2.4725, 2.2975, -3.8025};
+const Float_t AliFITv8::sPos2X[4] = {3.69, -2.410, 2.360, -3.740};
+const Float_t AliFITv8::sPos2Y[3] = {7.6875, 1.5875, -4.5125};
+// END: Support structure constants
+const Float_t AliFITv8::fPosModuleAx[24] = {
+    -12.2, -6.1, 0,        6.1,        12.2,       -12.2,   -6.1,  0,
+    6.1,   12.2, -13.3743, -7.2742999, 7.27429999, 13.3743, -12.2, -6.1,
+    0,     6.1,  12.2,     -12.2,      -6.1,       0,       6.1,   12.2};
+
+const Float_t AliFITv8::fPosModuleAy[24] = {
+    12.2,  12.2, 13.53, 12.2,  12.2,  6.1,    6.1,   7.43,
+    6.1,   6.1,  0,     0,     0,     0,      -6.1,  -6.1,
+    -7.43, -6.1, -6.1,  -12.2, -12.2, -13.53, -12.2, -12.2};
+const  float  AliFITv8::fstartC[3] = {20., 20, 5.5};
+const  float  AliFITv8::fstartA[3] = {20., 20., 5};
+const  float  AliFITv8::fInStart[3] = {2.9491, 2.9491, 2.5};
+
+//-------------------------------------------------------------------------
 AliFITv8::~AliFITv8() {
   // desctructor
   if (mRightTransformation)
@@ -1720,21 +1816,27 @@ void AliFITv8::CreateGeometry() {
 
   /// T0 implementation done here
   Int_t *idtmed = fIdtmed->GetArray();
-  Float_t zdetC = 85; // center of mother volume
+  Float_t zdetC = 82; // center of mother volume
   Float_t zdetA = 335.5;
 
   Int_t idrotm[999];
   Double_t x, y, z;
   AliMatrix(idrotm[901], 90., 0., 90., 90., 180., 0.);
 
-  //-------------------------------------------------------------------
-  //-------------------------------------------------------------------
+  TGeoVolumeAssembly *stlinC = new TGeoVolumeAssembly("0STR"); // C side mother
+  TGeoVolumeAssembly *stlinA = new TGeoVolumeAssembly("0STL"); // A side mother
+  // FIT interior
+  float pins[3];
+  for (int i=0; i<3; i++){
+    pins[i] = fInStart[i];
+  }
+  TVirtualMC::GetMC()->Gsvolu("0INS", "BOX", idtmed[kAir], pins, 3);
+  TGeoVolume *ins = gGeoManager->GetVolume("0INS");
+  SetOneMCP(ins);
   // C side Concave Geometry
   Double_t crad = 82.; // define concave c-side radius here
-
-  Double_t dP = 3.31735114408; // Work in Progress side length
-
-  // uniform angle between detector faces==
+  //  Double_t dP = 3.31735114408; // Work in Progress side length
+  Double_t dP = fInStart[0]; // uniform angle between detector faces==
   Double_t btta = 2 * TMath::ATan(dP / crad);
 
   // get noncompensated translation data
@@ -1784,6 +1886,7 @@ void AliFITv8::CreateGeometry() {
     yc2[i] =
         rcomp * TMath::Sin(ac[i] + TMath::Pi() / 2) * TMath::Sin(-1 * bc[i]);
     zc2[i] = rcomp * TMath::Cos(bc[i]);
+    printf(" side C %f  xc2[i] %f yc2[i] %f zc2[i] %f \n",  xc2[i], yc2[i], zc2[i] ) ;
 
     // Convert angles to degrees
     ac[i] *= 180 / TMath::Pi();
@@ -1791,15 +1894,45 @@ void AliFITv8::CreateGeometry() {
     gc[i] = -1 * ac[i];
   }
 
-  // A Side
-
-  TGeoVolumeAssembly *stlinA = new TGeoVolumeAssembly("0STL"); // A side mother/
-
-  TGeoVolumeAssembly *stlinC = new TGeoVolumeAssembly("0STR"); // C side mother
-  TVirtualMC::GetMC()->Gsvolu("0INS", "BOX", idtmed[kAir], fInStart, 3);
-  TGeoVolume *ins = gGeoManager->GetVolume("0INS");
   TGeoTranslation *tr[52];
   TString nameTr;
+
+  // C Side Transformations
+  TGeoRotation *rot[28];
+  TString nameRot;
+  TGeoCombiTrans *com[28];
+  TGeoCombiTrans *comCable[28];
+  TString nameCom;
+
+  // C Side Transformations
+  for (Int_t itr = 24; itr < 52; itr++) {
+    nameTr = Form("0TR%i", itr + 1);
+    nameRot = Form("0Rot%i", itr + 1);
+    int ic = itr - 24;
+    // nameCom = Form("0Com%i",itr+1);
+    rot[ic] = new TGeoRotation(nameRot.Data(), ac[ic], bc[ic], gc[ic]);
+    rot[ic]->RegisterYourself();
+
+    //    tr[itr] = new TGeoTranslation(nameTr.Data(), xc2[ic], yc2[ic],
+    //    (zc2[ic] - 80.));
+    // tr[itr]->RegisterYourself();
+    com[ic] = new TGeoCombiTrans(xc2[ic], yc2[ic], (zc2[ic] - 80), rot[ic]);
+    //    com[ic] = new TGeoCombiTrans(tr[itr], rot[ic]);
+    //    fPosModuleCx[ic] = xc2[ic];
+    // fPosModuleCy[ic] = yc2[ic];
+    // fPosModuleCz[ic] = zc2[ic] - 80;
+
+    TGeoHMatrix hm = *com[ic];
+    TGeoHMatrix *ph = new TGeoHMatrix(hm);
+    stlinC->AddNode(ins, itr, ph);
+    // cables
+    TGeoVolume *cables = SetCablesSize(itr);
+    comCable[ic] = new TGeoCombiTrans(
+        xc2[ic], yc2[ic], zc2[ic] - 80 + fInStart[2] + 0.2, rot[ic]);
+    TGeoHMatrix hmCable = *comCable[ic];
+    TGeoHMatrix *phCable = new TGeoHMatrix(hmCable);
+    stlinC->AddNode(cables, itr, comCable[ic]);
+  }
 
   // A side Translations
   for (Int_t itr = 0; itr < 24; itr++) {
@@ -1807,41 +1940,14 @@ void AliFITv8::CreateGeometry() {
     z = -fstartA[2] + fInStart[2];
     tr[itr] = new TGeoTranslation(nameTr.Data(), fPosModuleAx[itr],
                                   fPosModuleAy[itr], z);
-    printf(" itr %i A %f %f %f \n", itr, fPosModuleAx[itr], fPosModuleAx[itr],
-           z + zdetA);
     tr[itr]->RegisterYourself();
     stlinA->AddNode(ins, itr, tr[itr]);
-  }
+    printf("A  x %f y %f z %f \n",  fPosModuleAx[itr],  fPosModuleAy[itr], z);
+    }
+
   SetCablesA(stlinA);
-
-  TGeoRotation *rot[28];
-  TString nameRot;
-
-  TGeoCombiTrans *com[28];
-  TString nameCom;
-
-  // C Side Transformations
-  for (Int_t itr = 24; itr < 52; itr++) {
-    nameTr = Form("0TR%i", itr + 1);
-    nameRot = Form("0Rot%i", itr + 1);
-    // nameCom = Form("0Com%i",itr+1);
-    rot[itr - 24] = new TGeoRotation(nameRot.Data(), ac[itr - 24], bc[itr - 24],
-                                     gc[itr - 24]);
-    rot[itr - 24]->RegisterYourself();
-
-    tr[itr] = new TGeoTranslation(nameTr.Data(), xc2[itr - 24], yc2[itr - 24],
-                                  (zc2[itr - 24] - 80.));
-    tr[itr]->Print();
-    tr[itr]->RegisterYourself();
-
-    // com[itr-24] = new TGeoCombiTrans(tr[itr],rot[itr-24]);
-    com[itr - 24] = new TGeoCombiTrans(xc2[itr - 24], yc2[itr - 24],
-                                       (zc2[itr - 24] - 80), rot[itr - 24]);
-    TGeoHMatrix hm = *com[itr - 24];
-    TGeoHMatrix *ph = new TGeoHMatrix(hm);
-    stlinC->AddNode(ins, itr, ph);
-  }
   // Add FT0-A support Structure to the geometry
+  printf(" module size %f %f %f \n", fInStart[0], fInStart[1], fInStart[2]);
   stlinA->AddNode(constructFrameGeometry(), 1,
                   new TGeoTranslation(0, 0, -fstartA[2] + fInStart[2]));
 
@@ -1849,10 +1955,12 @@ void AliFITv8::CreateGeometry() {
   alice->AddNode(stlinA, 1, new TGeoTranslation(0, 0, zdetA));
   TGeoRotation *rotC = new TGeoRotation("rotC", 90., 0., 90., 90., 180., 0.);
   alice->AddNode(stlinC, 1, new TGeoCombiTrans(0., 0., -zdetC, rotC));
-
-  SetOneMCP(ins);
+  stlinC->Print();
+  stlinA->Print();
 
   SetVZEROGeo(alice); // rihan: the V0+ geometry is set by this function.
+
+
 }
 //--------------------------------------------------------------------
 
@@ -1874,7 +1982,7 @@ void AliFITv8::SetOneMCP(TGeoVolume *ins) {
   Float_t pmcpside[3] = {0.15, 2.949, 0.65};
   Float_t pmcptopglass[3] = {2.949, 2.949, 0.1}; // MCP top glass optical
   Float_t preg[3] = {1.324, 1.324, 0.005};       // Photcathode
-  Double_t pal[3] = {2.648, 2.648, 0.25}; // 5mm Al on top of each radiator
+  ///  Double_t pal[3] = {2.648, 2.648, 0.25}; // 5mm Al on top of each radiator
 
   // Entry window (glass)
   TVirtualMC::GetMC()->Gsvolu("0TOP", "BOX", idtmed[kOpGlass], ptop,
@@ -1916,8 +2024,10 @@ void AliFITv8::SetOneMCP(TGeoVolume *ins) {
       float yin = -fInStart[1] + 0.3 + (iy + 0.5) * 2 * ptopref[1];
       ntops++;
       ins->AddNode(topref, ntops, new TGeoTranslation(xin, yin, z));
+      topref->Print();
       z += ptopref[2] + 2. * pmcptopglass[2] + preg[2];
       ins->AddNode(cat, ntops, new TGeoTranslation(xin, yin, z));
+      cat->Print();
     }
   }
   // MCP
@@ -1960,6 +2070,7 @@ void AliFITv8::SetOneMCP(TGeoVolume *ins) {
   z = -fInStart[2] + 2 * ptopref[2] + pmcptopglass[2] + 2 * pmcp[2] +
       pmcpbase[2];
   ins->AddNode(mcpbase, 1, new TGeoTranslation(0, 0, z));
+  ins->Print();
 }
 
 //------------------------------------------------------------------------
@@ -2056,9 +2167,9 @@ TGeoVolume *AliFITv8::SetCablesSize(int mod) {
 // and revised by Jason Pruitt from Cal Poly in 2019-2021
 TGeoVolume *AliFITv8::constructFrameGeometry() {
   // define the media
-  TGeoMedium *Vacuum = gGeoManager->GetMedium("FT0_Vacuum$");
-  TGeoMedium *Al = gGeoManager->GetMedium("FT0_Aluminium$");
-
+  TGeoMedium *Vacuum = gGeoManager->GetMedium(3);
+  TGeoMedium *Al = gGeoManager->GetMedium(15);
+  Al->Print();
   // make a volume assembly for the frame
   TGeoVolumeAssembly *FT0_Frame = new TGeoVolumeAssembly("FT0_Frame");
 
@@ -2071,7 +2182,6 @@ TGeoVolume *AliFITv8::constructFrameGeometry() {
       new TGeoBBox("frame1", sFrame1X / 2, sFrame1Y / 2, sFrameZ / 2);
   TGeoBBox *frame2 =
       new TGeoBBox("frame2", sFrame2X / 2, sFrame2Y / 2, sFrameZ / 2);
-
   // the following elements are subtracted from frame1 and frame2 to better
   // approximate the CAD shape
   TGeoBBox *rect1 =
@@ -2103,7 +2213,6 @@ TGeoVolume *AliFITv8::constructFrameGeometry() {
                    sQuartzRadiatorSide / 2, sQuartzRadiatorZ / 2);
   TGeoBBox *pmtBox = new TGeoBBox("pmtBox", sPmtSide / 2 + sEps,
                                   sPmtSide / 2 + sEps, sPmtZ / 2 + sEps);
-
   // these two shapes create a subtraction so that the corners of the holes that
   // seat the sens elements are rounded
   TGeoBBox *pmtCornerRect =
@@ -2168,7 +2277,6 @@ TGeoVolume *AliFITv8::constructFrameGeometry() {
 
   return FT0_Frame;
 }
-
 // the following are continually concatenated strings that ROOT Geometry will
 // read in order to piece together the objects and translations that are
 // defined above (what ROOT Geometry calls Booleans)
@@ -2227,7 +2335,6 @@ std::string AliFITv8::frame1CompositeShapeBoolean() {
 
   return frame1CompositeShapeBoolean;
 }
-
 // frame2 is the vertical aluminum box piece of the L-shape
 std::string AliFITv8::frame2CompositeShapeBoolean() {
   std::string frame2CompositeShapeBoolean = "";
@@ -2283,20 +2390,6 @@ std::string AliFITv8::frame2CompositeShapeBoolean() {
 
   return frame2CompositeShapeBoolean;
 }
-
-// Plate group elements
-std::string AliFITv8::plateGroupCompositeShapeBoolean() {
-  // create a string for the boolean operations for the composite plateGroup
-  // shape
-  std::string plateGroupCompositeShapeBoolean = "";
-
-  // add the plateBoxes to the plateGroup
-  plateGroupCompositeShapeBoolean += "plateBox:plateTr1";
-  plateGroupCompositeShapeBoolean += " + plateBox:plateTr2";
-  plateGroupCompositeShapeBoolean += " + plateBox:plateTr3";
-
-  return plateGroupCompositeShapeBoolean;
-}
 // Support structure L-shape element definition
 std::string AliFITv8::frameCompositeShapeBoolean() {
   // create a string for the boolean operations for the composite plateGroup
@@ -2323,6 +2416,21 @@ std::string AliFITv8::frameCompositeShapeBoolean() {
 
   return frameCompositeShapeBoolean;
 }
+
+// Plate group elements
+std::string AliFITv8::plateGroupCompositeShapeBoolean() {
+  // create a string for the boolean operations for the composite plateGroup
+  // shape
+  std::string plateGroupCompositeShapeBoolean = "";
+
+  // add the plateBoxes to the plateGroup
+  plateGroupCompositeShapeBoolean += "plateBox:plateTr1";
+  plateGroupCompositeShapeBoolean += " + plateBox:plateTr2";
+  plateGroupCompositeShapeBoolean += " + plateBox:plateTr3";
+
+  return plateGroupCompositeShapeBoolean;
+}
+
 // Optical fiber plate for the first aluminum box in the L-shaped element
 std::string AliFITv8::opticalFiberPlateCompositeShapeBoolean1() {
   // create a string for the boolean operations for the composite
@@ -2340,7 +2448,6 @@ std::string AliFITv8::opticalFiberPlateCompositeShapeBoolean1() {
 
   return opticalFiberPlateCompositeShapeBoolean1;
 }
-
 // Optical fiber plate for the second aluminum box in the L-shaped element
 std::string AliFITv8::opticalFiberPlateCompositeShapeBoolean2() {
   // create a string for the boolean operations for the composite
@@ -2360,6 +2467,7 @@ std::string AliFITv8::opticalFiberPlateCompositeShapeBoolean2() {
 
   return opticalFiberPlateCompositeShapeBoolean2;
 }
+
 // Create rounded PMT socket corners
 std::string AliFITv8::pmtCornerCompositeShapeBoolean() {
   // create a string for the boolean operations for the composite pmtCorner
@@ -2402,7 +2510,6 @@ void AliFITv8::defineTransformations() {
   definePlateTransformations();
   defineFrameTransformations();
 }
-// Transformations for quartz radiator sockets
 void AliFITv8::defineQuartzRadiatorTransformations() {
   // translations for quartz radiator shapes to be removed from the frame2 pice
   // of the L-shaped element
@@ -2424,7 +2531,6 @@ void AliFITv8::defineQuartzRadiatorTransformations() {
   TGeoTranslation *quartzRadiatorTr6 = new TGeoTranslation(
       "quartzRadiatorTr6", sPos1X[2], sPos1Y[3], sQuartzHeight);
   quartzRadiatorTr6->RegisterYourself();
-
   // translations for quartz radiator shapes to be removed from the frame1 piece
   // of the L-shaped element
   TGeoTranslation *quartzRadiatorTr7 = new TGeoTranslation(
@@ -2468,7 +2574,6 @@ void AliFITv8::definePmtTransformations() {
   TGeoTranslation *PMTTr6 =
       new TGeoTranslation("PMTTr6", sPos1X[2], sPos1Y[3], sPmtHeight);
   PMTTr6->RegisterYourself();
-
   // translations for PMT shapes to be removed from the frame1 piece in the
   // L-shaped element
   TGeoTranslation *PMTTr7 =
@@ -2489,7 +2594,6 @@ void AliFITv8::definePmtTransformations() {
   TGeoTranslation *PMTTr12 =
       new TGeoTranslation("PMTTr12", sPos2X[3], sPos2Y[2], sPmtHeight);
   PMTTr12->RegisterYourself();
-
   // define pmtCorner transformations
   TGeoTranslation *pmtCornerTubeTr = new TGeoTranslation(
       "pmtCornerTubeTr", sPmtCornerTubePos, sPmtCornerTubePos, 0);
@@ -2526,8 +2630,7 @@ void AliFITv8::definePmtTransformations() {
   TGeoCombiTrans *edgeCornerTr = new TGeoCombiTrans(
       "edgeCornerTr", sEdgeCornerPos[0], sEdgeCornerPos[1], 0, reflect5);
   edgeCornerTr->RegisterYourself();
-}
-// Transformations for plate elements
+} // Transformations for plate elements
 void AliFITv8::definePlateTransformations() {
   // TODO: redefine fiber head transformations
   // TODO: move hard-coded numbers to be variables in the constants lists
@@ -2564,7 +2667,6 @@ void AliFITv8::definePlateTransformations() {
       new TGeoCombiTrans("opticalFiberHeadTr8", -0.9786, 1.125, 0,
                          new TGeoRotation("rot8", -30, 0, 0));
   opticalFiberHeadTr8->RegisterYourself();
-
   // define transformations to form a plateBox (2 basicPlates and 2 cablePlates)
   TGeoCombiTrans *basicPlateTr =
       new TGeoCombiTrans("basicPlateTr", 0, -sPlateSpacing, 0,
@@ -2588,7 +2690,6 @@ void AliFITv8::definePlateTransformations() {
   TGeoTranslation *plateTr3 =
       new TGeoTranslation("plateTr3", sPlateSpacing, 0, 0);
   plateTr3->RegisterYourself();
-
   // TODO: fix plateGroupTr2
   // TODO: Move hard-coded numbers to variables defined in the constants list
   // define transformations for the plateGroups (6 basicPlates and 6
@@ -2601,7 +2702,6 @@ void AliFITv8::definePlateTransformations() {
       sPlateGroupZ, new TGeoRotation("plateGroup2Rotation", -90, 0, 0));
   plateGroupTr2->RegisterYourself();
 }
-
 // Transformations for the L-shaped elements
 void AliFITv8::defineFrameTransformations() {
 
@@ -2637,7 +2737,6 @@ void AliFITv8::defineFrameTransformations() {
       "rectTr3", sFrame1PosX + sXoffset + frameXshift + 10.75 - sRect3X / 2,
       sFrame1PosY + sYoffset - 6.8525 + sRect3Y / 2, 0 + zshift);
   rectTr3->RegisterYourself();
-
   TGeoTranslation *rectTr4 = new TGeoTranslation(
       "rectTr4", sFrame1PosX + sXoffset + frameXshift - 7.925,
       sFrame1PosY + sYoffset - 6.44, 0 + zshift + 10);
@@ -2742,7 +2841,7 @@ void AliFITv8::CreateMaterials() {
   Float_t aT0Plast[4] = {1.00784, 12.0107, 15.999, 63.54};
   Float_t zT0Plast[4] = {1, 6, 8, 29};
   Float_t wT0Plast[4] = {0.08, 0.53, 0.22, 0.17}; ////!!!!!
-  const Float_t denCable = 3.66;
+  Float_t denCable = 3.66;
 
   //*** Definition Of avaible FIT materials ***
   AliMaterial(11, "Aliminium$", 26.98, 13.0, 2.7, 8.9, 999);
@@ -3008,7 +3107,7 @@ void AliFITv8::Init() {
 void AliFITv8::StepManager() {
   // Called for every step in the FIT AliFITv8
   Int_t id, copy, copy1;
-  static Float_t hits[13];
+  Float_t hits[13];
   static Int_t vol[3];
   TLorentzVector pos;
   TLorentzVector mom;
