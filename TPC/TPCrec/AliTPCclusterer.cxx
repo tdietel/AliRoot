@@ -639,6 +639,7 @@ void AliTPCclusterer::AddCluster(AliTPCclusterMI &c, bool addtoarray, Float_t * 
     if (transform->GetCurrentTimeStamp()!=fTimeStamp) {
       transform->SetCurrentTimeStamp(fTimeStamp);
     }
+    transform->AccountCurrentBC( fBunchCrossNumber );
     Double_t x[3]={static_cast<Double_t>(c.GetRow()),static_cast<Double_t>(c.GetPad()),static_cast<Double_t>(c.GetTimeBin())};
     Int_t i[1]={fSector};
     transform->Transform(x,i,0,1);
@@ -916,6 +917,7 @@ void AliTPCclusterer::ProcessSectorData(){
             Double_t x[]={static_cast<Double_t>(iRow),static_cast<Double_t>(iPad-3),static_cast<Double_t>(iTimeBin-3)};
             Int_t i[]={fSector};
             AliTPCTransform trafo;
+	    trafo.AccountCurrentBC( fBunchCrossNumber );
             trafo.Transform(x,i,0,1);
             Double_t gx[3]={x[0],x[1],x[2]};
             trafo.RotatedGlobal2Global(fSector,gx);

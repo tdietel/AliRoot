@@ -115,6 +115,8 @@ AliESDtrackCuts::AliESDtrackCuts(const Char_t* name, const Char_t* title) :
   fCutMaxC44(0),
   fCutMaxC55(0),
   fCutMaxRel1PtUncertainty(0),
+  fCutMaxRel1PtUncertaintyPtDep(""),
+  f1CutMaxRel1PtUncertaintyPtDep(0x0),
   fCutAcceptKinkDaughters(0),
   fCutAcceptSharedTPCClusters(0),
   fCutMaxFractionSharedTPCClusters(0),
@@ -235,6 +237,8 @@ AliESDtrackCuts::AliESDtrackCuts(const AliESDtrackCuts &c) :
   fCutMaxC44(0),
   fCutMaxC55(0),
   fCutMaxRel1PtUncertainty(0),
+  fCutMaxRel1PtUncertaintyPtDep(""),
+  f1CutMaxRel1PtUncertaintyPtDep(0x0),  
   fCutAcceptKinkDaughters(0),
   fCutAcceptSharedTPCClusters(0),
   fCutMaxFractionSharedTPCClusters(0),
@@ -350,6 +354,9 @@ AliESDtrackCuts::~AliESDtrackCuts()
     if (fhTOFdistance[i])
       delete fhTOFdistance[i];
   }
+  
+  if(f1CutMaxRel1PtUncertaintyPtDep)delete f1CutMaxRel1PtUncertaintyPtDep;
+  f1CutMaxRel1PtUncertaintyPtDep = 0;
 
   if(f1CutMaxDCAToVertexXYPtDep)delete f1CutMaxDCAToVertexXYPtDep;
   f1CutMaxDCAToVertexXYPtDep = 0;
@@ -397,6 +404,11 @@ void AliESDtrackCuts::Init()
   fCutMaxC55 = 0;
 
   fCutMaxRel1PtUncertainty = 0;
+  
+  fCutMaxRel1PtUncertaintyPtDep = "";
+  
+  if(f1CutMaxRel1PtUncertaintyPtDep)delete f1CutMaxRel1PtUncertaintyPtDep;
+  f1CutMaxRel1PtUncertaintyPtDep = 0;  
 
   fCutAcceptKinkDaughters = 0;
   fCutAcceptSharedTPCClusters = 0;
@@ -419,7 +431,7 @@ void AliESDtrackCuts::Init()
   fCutMaxDCAToVertexZPtDep = "";
   fCutMinDCAToVertexXYPtDep = "";
   fCutMinDCAToVertexZPtDep = "";
-
+  
   if(f1CutMaxDCAToVertexXYPtDep)delete f1CutMaxDCAToVertexXYPtDep;
   f1CutMaxDCAToVertexXYPtDep = 0;
   if( f1CutMaxDCAToVertexXYPtDep) delete  f1CutMaxDCAToVertexXYPtDep;
@@ -430,8 +442,7 @@ void AliESDtrackCuts::Init()
   f1CutMinDCAToVertexXYPtDep = 0;
   if(f1CutMinDCAToVertexZPtDep)delete f1CutMinDCAToVertexZPtDep;
   f1CutMinDCAToVertexZPtDep = 0;
-
-
+  
   fPMin = 0;
   fPMax = 0;
   fPtMin = 0;
@@ -542,6 +553,11 @@ void AliESDtrackCuts::Copy(TObject &c) const
   target.fCutMaxC55 = fCutMaxC55;
 
   target.fCutMaxRel1PtUncertainty = fCutMaxRel1PtUncertainty;
+  target.fCutMaxRel1PtUncertaintyPtDep = fCutMaxRel1PtUncertaintyPtDep;
+  if(fCutMaxRel1PtUncertaintyPtDep.Length()>0)target.SetMaxRel1PtUncertaintyPtDep(fCutMaxRel1PtUncertaintyPtDep.Data());
+  if(f1CutMaxRel1PtUncertaintyPtDep){
+    target.f1CutMaxRel1PtUncertaintyPtDep = (TFormula*) f1CutMaxRel1PtUncertaintyPtDep->Clone("f1CutMaxRel1PtUncertaintyPtDep");
+  }  
 
   target.fCutAcceptKinkDaughters = fCutAcceptKinkDaughters;
   target.fCutAcceptSharedTPCClusters = fCutAcceptSharedTPCClusters;
@@ -747,9 +763,6 @@ void AliESDtrackCuts::SetCutGeoNcrNcl(Float_t deadZoneWidth,Float_t cutGeoNcrNcl
   fCutGeoNcrNclFractionNcl=cutGeoNcrNclFractionNcl;
 }
 
-
-
-
 //____________________________________________________________________
 AliESDtrackCuts* AliESDtrackCuts::GetStandardTPCOnlyTrackCuts()
 {
@@ -847,6 +860,20 @@ AliESDtrackCuts* AliESDtrackCuts::GetStandardITSTPCTrackCuts2011(Bool_t selPrima
   return esdTrackCuts;
 }
 
+//______________________________________________________________________
+AliESDtrackCuts* AliESDtrackCuts::GetStandardITSTPCTrackCuts2011TighterChi2(Bool_t selPrimaries, Int_t clusterCut)
+{
+  // In 2020 the error parametrisation in the TPC was improved resulting in a narrower chi2/cls distribution.
+  // Therefore all newer reconstructions require a tighter cut on this variable to remove outlier tracks.
+  // In particular this change affects the fowllowing periods (and corresponding MCs):
+  // LHC18qr_pass3, LHC15o_pass2, LHC16rsqt_pass2 (and all newer reconstructions).
+  
+  AliESDtrackCuts* esdTrackCuts = GetStandardITSTPCTrackCuts2011(selPrimaries, clusterCut);
+  esdTrackCuts->SetMaxChi2PerClusterTPC(2.5);
+  AliInfoClass("Applying tighter chi2/ncl cut for reconstruction with improved error parametrisation.");
+  return esdTrackCuts;
+}
+
 //____________________________________________________________________
 AliESDtrackCuts*  AliESDtrackCuts::GetStandardITSTPCTrackCuts2015PbPb(Bool_t selPrimaries/*=kTRUE*/, Int_t clusterCut/*=1*/, Bool_t cutAcceptanceEdges/*=kTRUE*/, Bool_t removeDistortedRegions/*=kFALSE*/) {
   /// creates an AliESDtrackCuts object and fills it with standard values for ITS-TPC cuts for PbPb 2015 data
@@ -896,6 +923,19 @@ AliESDtrackCuts*  AliESDtrackCuts::GetStandardITSTPCTrackCuts2015PbPb(Bool_t sel
 
 }
  
+//______________________________________________________________________
+AliESDtrackCuts* AliESDtrackCuts::GetStandardITSTPCTrackCuts2015PbPbTighterChi2(Bool_t selPrimaries/*=kTRUE*/, Int_t clusterCut/*=1*/, Bool_t cutAcceptanceEdges/*=kTRUE*/, Bool_t removeDistortedRegions/*=kFALSE*/)
+{
+  // In 2020 the error parametrisation in the TPC was improved resulting in a narrower chi2/cls distribution.
+  // Therefore all newer reconstructions require a tighter cut on this variable to remove outlier tracks.
+  // In particular this change affects the fowllowing periods (and corresponding MCs):
+  // LHC18qr_pass3, LHC15o_pass2, LHC16rsqt_pass2 (and all newer reconstructions).
+  
+  AliESDtrackCuts* esdTrackCuts = GetStandardITSTPCTrackCuts2015PbPb(selPrimaries, clusterCut, cutAcceptanceEdges, removeDistortedRegions);
+  esdTrackCuts->SetMaxChi2PerClusterTPC(2.5);
+  AliInfoClass("Applying tighter chi2/ncl cut for reconstruction with improved error parametrisation.");
+  return esdTrackCuts;
+}
 
 //____________________________________________________________________
 AliESDtrackCuts* AliESDtrackCuts::GetStandardITSTPCTrackCuts2010(Bool_t selPrimaries,Int_t clusterCut)
@@ -1044,8 +1084,8 @@ AliESDtrackCuts* AliESDtrackCuts::GetStandardITSSATrackCutsPbPb2010(Bool_t selPr
 
   return esdTrackCuts;
 }
-//____________________________________________________________________
 
+//____________________________________________________________________
 AliESDtrackCuts* AliESDtrackCuts::GetStandardV0DaughterCuts()
 {
   /// creates a AliESDtrackCuts object and fills it with standard cuts for V0 daughters
@@ -1054,6 +1094,43 @@ AliESDtrackCuts* AliESDtrackCuts::GetStandardV0DaughterCuts()
   esdTrackCuts->SetRequireTPCRefit(kTRUE);
   esdTrackCuts->SetMinNClustersTPC(70);
   esdTrackCuts->SetAcceptKinkDaughters(kFALSE);
+  return esdTrackCuts;
+}
+
+//____________________________________________________________________
+AliESDtrackCuts* AliESDtrackCuts::GetStandardRun3NoTrackCuts()
+{
+  /// creates an AliESDtrackCuts object equivalent to selecting all tracks in Run3
+
+  AliESDtrackCuts* esdTrackCuts = new AliESDtrackCuts();
+  // the sigma to vertex cut is enabled by default
+  // -> needs to be disabled in 'no-cut' mode
+  esdTrackCuts->SetRequireSigmaToVertex(false);
+  return esdTrackCuts;
+}
+
+//____________________________________________________________________
+AliESDtrackCuts* AliESDtrackCuts::GetStandardRun3GlobalTrackCuts()
+{
+  /// creates an AliESDtrackCuts object equivalent to selecting global tracks in Run3
+
+  AliESDtrackCuts* esdTrackCuts = GetStandardITSTPCTrackCuts2011();
+  // disable kink rejection cut that is not available in Run3 (yet?)
+  esdTrackCuts->SetAcceptKinkDaughters(kTRUE);
+  // add default kinematic cuts
+  esdTrackCuts->SetPtRange(0.1, 1e10);
+  esdTrackCuts->SetEtaRange(-0.8, 0.8);
+  return esdTrackCuts;
+}
+
+//____________________________________________________________________
+AliESDtrackCuts* AliESDtrackCuts::GetStandardRun3GlobalSDDTrackCuts()
+{
+  /// creates an AliESDtrackCuts object equivalent to selecting global tracks with SDD requirement in Run3
+
+  AliESDtrackCuts* esdTrackCuts = GetStandardRun3GlobalTrackCuts();
+  esdTrackCuts->SetClusterRequirementITS(AliESDtrackCuts::kSPD, AliESDtrackCuts::kNone);
+  esdTrackCuts->SetClusterRequirementITS(AliESDtrackCuts::kSDD, AliESDtrackCuts::kFirst);
   return esdTrackCuts;
 }
 
@@ -1305,6 +1382,8 @@ Bool_t AliESDtrackCuts::AcceptTrack(const AliESDtrack* esdTrack)
     bCov[0]=0; bCov[2]=0;
   }
 
+  // set pt-dependent pt resolution cut
+  SetPtDepUncertaintyCuts(esdTrack->Pt());
 
   // set pt-dependent DCA cuts, if requested
   SetPtDepDCACuts(esdTrack->Pt());
@@ -2840,6 +2919,56 @@ Bool_t AliESDtrackCuts::CheckPtDepDCA(TString dist,Bool_t print) const {
    tmp.ReplaceAll("pt","x");
    f1CutMinDCAToVertexZPtDep = new TFormula("f1CutMinDCAToVertexZPtDep",tmp.Data());
 }
+
+
+//--------------------------------------------------------------------------
+
+void AliESDtrackCuts::SetPtDepUncertaintyCuts(Double_t pt) {
+  /// set the pt-dependent cut on pt resolution
+
+  if(f1CutMaxRel1PtUncertaintyPtDep) {
+     fCutMaxRel1PtUncertainty=f1CutMaxRel1PtUncertaintyPtDep->Eval(pt);
+  }
+
+  return;
+}
+
+
+//--------------------------------------------------------------------------
+
+Bool_t AliESDtrackCuts::CheckPtDepUncertainty(TString dist,Bool_t print) const {
+  /// Check the correctness of the string syntax
+
+  Bool_t retval=kTRUE;
+
+  if(!dist.Contains("pt")) {
+    if(print) AliError("string must contain \"pt\"");
+    retval= kFALSE;
+  }
+  return retval;
+}
+
+//--------------------------------------------------------------------------
+
+ void AliESDtrackCuts::SetMaxRel1PtUncertaintyPtDep(const char *dist){
+
+   if(f1CutMaxRel1PtUncertaintyPtDep){
+     delete f1CutMaxRel1PtUncertaintyPtDep;
+     // reset both
+     f1CutMaxRel1PtUncertaintyPtDep = 0;
+     fCutMaxRel1PtUncertaintyPtDep = "";
+   }
+   if(!CheckPtDepUncertainty(dist,kTRUE)){
+     return;
+   }
+   fCutMaxRel1PtUncertaintyPtDep = dist;
+   TString tmp(dist);
+   tmp.ReplaceAll("pt","x");
+   f1CutMaxRel1PtUncertaintyPtDep = new TFormula("f1CutMaxRel1PtUncertaintyPtDep",tmp.Data());
+
+}
+
+//--------------------------------------------------------------------------
 
 AliESDtrackCuts* AliESDtrackCuts::GetMultEstTrackCuts(MultEstTrackCuts cut)
 {

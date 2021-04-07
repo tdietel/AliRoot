@@ -107,14 +107,14 @@ int main(int argc, char **argv)
   if (result == 0) {
     rlim_t oldss = rl.rlim_cur;
     if (newStackSize > rl.rlim_max) {
-      AliWarningGeneralF("AliRoot","Requestested new stack size %lld > hard limit %lld MB",newStackSize/kMB,rl.rlim_max/kMB);
+      AliWarningGeneralF("AliRoot","Requestested new stack size %lld > hard limit %lld MB",(long long int) (newStackSize/kMB), (long long int) (rl.rlim_max/kMB));
       newStackSize = rl.rlim_max;
     }
     if (rl.rlim_cur < newStackSize) {
       rl.rlim_cur = newStackSize;
       result = setrlimit(RLIMIT_STACK, &rl);
       if (result != 0)	fprintf(stderr, "setrlimit returned result = %d\n", result);
-      else AliInfoGeneralF("AliRoot","Set stack size from %lld to %lld MB",oldss/kMB,rl.rlim_cur/kMB);
+      else AliInfoGeneralF("AliRoot","Set stack size from %lld to %lld MB",(long long int) (oldss/kMB),(long long int) (rl.rlim_cur/kMB));
     }
   }
   
@@ -132,6 +132,7 @@ int main(int argc, char **argv)
   // Create new configuration
 #if ROOT_VERSION_CODE < ROOT_VERSION(5,99,0)
   // ROOT 5: aliroot is linked to the necessary libraries
+  gSystem->AddIncludePath("-I$ALICE_ROOT/include -I$ALICE_PHYSICS/include");
   new AliRun("gAlice", "The ALICE Off-line Simulation Framework");
 #else
   // ROOT 6+: aliroot has minimal dependencies: init gAlice through the interpreter

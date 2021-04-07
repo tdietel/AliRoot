@@ -1714,17 +1714,17 @@ Double_t b, Double_t maxd, Double_t dz[2], Double_t covar[3]) {
   x-=xv; y-=yv;
 
   //Estimate the impact parameter neglecting the track curvature
-  Double_t d=TMath::Abs(x*snp - y*TMath::Sqrt((1.-snp)*(1.+snp)));
+  double csp = TMath::Sqrt((1.-snp)*(1.+snp));
+  Double_t d=TMath::Abs(x*snp - y*csp);
   if (d > maxd) return kFALSE; 
 
   //Propagate to the DCA
   Double_t crv=GetC(b);
   if (TMath::Abs(b) < kAlmost0Field) crv=0.;
 
-  Double_t tgfv=-(crv*x - snp)/(crv*y + TMath::Sqrt((1.-snp)*(1.+snp)));
-  sn=tgfv/TMath::Sqrt(1.+ tgfv*tgfv); cs=TMath::Sqrt((1.-sn)*(1.+sn));
-  if (TMath::Abs(tgfv)>0.) cs = sn/tgfv;
-  else cs=1.;
+  Double_t tgfv=-(crv*x - snp)/(crv*y + csp);  
+  cs = 1./TMath::Sqrt(1+tgfv*tgfv);
+  sn = cs<1. ? tgfv*cs : 0.;
 
   x = xv*cs + yv*sn;
   yv=-xv*sn + yv*cs; xv=x;
@@ -1772,18 +1772,18 @@ Double_t b[3], Double_t maxd, Double_t dz[2], Double_t covar[3]) {
   x-=xv; y-=yv;
 
   //Estimate the impact parameter neglecting the track curvature
-  Double_t d=TMath::Abs(x*snp - y*TMath::Sqrt((1.-snp)*(1.+snp)));
+  double csp = TMath::Sqrt((1.-snp)*(1.+snp));
+  Double_t d=TMath::Abs(x*snp - y*csp);
   if (d > maxd) return kFALSE; 
 
   //Propagate to the DCA
   Double_t crv=GetC(b[2]);
   if (TMath::Abs(b[2]) < kAlmost0Field) crv=0.;
 
-  Double_t tgfv=-(crv*x - snp)/(crv*y + TMath::Sqrt((1.-snp)*(1.+snp)));
-  sn=tgfv/TMath::Sqrt(1.+ tgfv*tgfv); cs=TMath::Sqrt((1.-sn)*(1.+sn));
-  if (TMath::Abs(tgfv)>0.) cs = sn/tgfv;
-  else cs=1.;
-
+  Double_t tgfv=-(crv*x - snp)/(crv*y + csp);
+  cs = 1./TMath::Sqrt(1+tgfv*tgfv);
+  sn = cs<1. ? tgfv*cs : 0.;
+  
   x = xv*cs + yv*sn;
   yv=-xv*sn + yv*cs; xv=x;
 
@@ -2877,7 +2877,7 @@ Bool_t AliExternalTrackParam::GetXatLabR(Double_t r,Double_t &x, Double_t bz, In
 	if (sn>0) {if (fy>det)  return kFALSE;} // track is along Y axis and above the circle
 	else      {if (fy<-det) return kFALSE;} // track is against Y axis amd belo the circle
       }
-      else if(dir>0) {                                    // agains track direction
+      else if (dir<0) {                                    // agains track direction
 	if (sn>0) {if (fy<-det) return kFALSE;} // track is along Y axis
         else if (fy>det)  return kFALSE;        // track is against Y axis
       }
@@ -3075,8 +3075,8 @@ Double_t  AliExternalTrackParam::GetParameterAtRadius(Double_t r, Double_t bz, I
   //     no correction for material is used
   //  
   // r  - radius of interest
-  // bz - magentic field 
-  // retun values dependens on parType:
+  // bz - magnetic field
+  // return values depends on parType:
   //    parType = 0  -gx 
   //    parType = 1  -gy 
   //    parType = 2  -gz 
@@ -3089,6 +3089,11 @@ Double_t  AliExternalTrackParam::GetParameterAtRadius(Double_t r, Double_t bz, I
   //    parType = 7  - global position phi
   //    parType = 8  - global direction phi
   //    parType = 9  - direction phi- positionphi
+  //    parType =10  - local position phi - assuming ALICE TPC/TRD,TOF ideal frame
+  //    parType =11  - local sector (int)
+  //    parType =12  - radial distance to closest edge (cm)
+  //    parType =13  - delta sector (unit)
+  //    parType =14  - sector
   if (parType<0) {
     parType=-1;
      return 0;
@@ -3111,6 +3116,21 @@ Double_t  AliExternalTrackParam::GetParameterAtRadius(Double_t r, Double_t bz, I
 
   if (parType==6) return TMath::Sqrt(xyz[0]*xyz[0]+xyz[1]*xyz[1]);
   if (parType==7) return TMath::ATan2(xyz[1],xyz[0]);
+  if (parType>=10) {
+    Double_t phi = TMath::ATan2(xyz[1], xyz[0]);
+    if (phi < 0) phi += TMath::TwoPi();
+    const Float_t phiSec = TMath::DegToRad() * 20.;
+    Double_t sector = phi / phiSec;
+    if (parType == 10) return (sector - int(sector) - 0.5) * phiSec;
+    if (parType == 11) return int(sector);
+    if (parType == 12 ) {
+      Double_t dSector = (sector - int(sector));
+      if (dSector > 0.5) dSector -= 1;
+      return TMath::Tan(dSector * phiSec) * r;
+    }
+    if (parType==13) return sector - int(sector);
+    if (parType==14) return sector;
+  }
   //
   // momenta parameters
   //

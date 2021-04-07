@@ -120,7 +120,7 @@ AliESDCaloCluster::AliESDCaloCluster(const AliESDCaloCluster& clus) :
   if(clus.fClusterMCEdepFraction && clus.fNLabel > 0)
   {
     fClusterMCEdepFraction = new UShort_t[clus.fNLabel];
-    for (Int_t i=0; i<clus.fNLabel; i++) fClusterMCEdepFraction[i]=clus.fClusterMCEdepFraction[i];
+    for (UInt_t i=0; i<clus.fNLabel; i++) fClusterMCEdepFraction[i]=clus.fClusterMCEdepFraction[i];
   }
 
   for (Int_t i = 0; i <= kLastUserDefEnergy; i++) 
@@ -202,7 +202,7 @@ AliESDCaloCluster &AliESDCaloCluster::operator=(const AliESDCaloCluster& source)
       fClusterMCEdepFraction = new UShort_t[source.fNLabel];
     }
     
-    for (Int_t i=0; i<source.fNLabel; i++) 
+    for (UInt_t i=0; i<source.fNLabel; i++) 
       fClusterMCEdepFraction[i]=source.fClusterMCEdepFraction[i];
   }
 
@@ -271,8 +271,10 @@ void AliESDCaloCluster::Copy(TObject &obj) const
 //_______________________________________________________________________
 AliESDCaloCluster::~AliESDCaloCluster()
 { 
-  if(fTracksMatched) delete fTracksMatched; fTracksMatched = 0;
-  if(fLabels)        delete fLabels;        fLabels        = 0;
+  if(fTracksMatched) delete fTracksMatched;
+  fTracksMatched = 0;
+  if(fLabels)        delete fLabels;
+  fLabels        = 0;
   
   if(fCellsAmpFraction)       { delete[] fCellsAmpFraction;       fCellsAmpFraction       = 0 ; }
   if(fCellsAbsId)             { delete[] fCellsAbsId;             fCellsAbsId             = 0 ; }
@@ -286,8 +288,10 @@ AliESDCaloCluster::~AliESDCaloCluster()
 //_______________________________________________________________________
 void AliESDCaloCluster::Clear(const Option_t*)
 { 
-  if(fTracksMatched) delete fTracksMatched; fTracksMatched = 0;
-  if(fLabels)        delete fLabels;        fLabels        = 0;
+  if(fTracksMatched) delete fTracksMatched;
+  fTracksMatched = 0;
+  if(fLabels)        delete fLabels;
+  fLabels        = 0;
   
   if(fCellsAmpFraction)       { delete[] fCellsAmpFraction;       fCellsAmpFraction       = 0 ; }
   if(fCellsAbsId)             { delete[] fCellsAbsId;             fCellsAbsId             = 0 ; }
@@ -489,7 +493,7 @@ UInt_t  AliESDCaloCluster::PackMCEdepFraction(Float_t * eDep) const
 //______________________________________________________________________________
 Float_t  AliESDCaloCluster::GetClusterMCEdepFraction(Int_t mcIndex) const
 { 
-  if ( mcIndex < 0 ||  mcIndex >= GetNLabels() || !fClusterMCEdepFraction) return 0. ;
+  if ( mcIndex < 0 ||  mcIndex >= (Int_t) GetNLabels() || !fClusterMCEdepFraction) return 0. ;
 
   return  fClusterMCEdepFraction[mcIndex]/100. ; 
 }
@@ -549,4 +553,24 @@ void  AliESDCaloCluster::SetClusterMCEdepFraction(UShort_t *array)
   
   for (Int_t i = 0; i < fLabels->GetSize(); i++) 
     fClusterMCEdepFraction[i] = array[i];
+}
+
+void  AliESDCaloCluster::Print(Option_t *) const
+{
+  printf("ID:%4d E:%e Ecore:%e Disp:%e Chi2:%e M20:%e M02:%e DstCPV:%e Dx:%+e Dy:%+e\n"
+         "        Dist2Bad:%e NExMax:%d Type:%d TOF:%e, MCEFrac:%e Exotic:%d\n",
+         fID, fEnergy, fCoreEnergy, fDispersion, fChi2, fM20, fM02, fEmcCpvDistance, fTrackDx,
+         fTrackDz, fDistToBadChannel, fNExMax, int(fClusterType), fTOF, fMCEnergyFraction, fIsExotic);
+  //
+  if (fLabels) {
+    for (int i=0;i<fLabels->GetSize();i++) {
+      printf("Lbl:%+6d (%e)\n",(*fLabels)[i], fClusterMCEdepFraction ? fClusterMCEdepFraction[i] : -1.);
+    }
+  }
+  //
+  if (fCellsAbsId) {
+    for (int i=0;i<fNCells;i++) {
+      printf("Cell: %+4d CellFr: %e MCFr:%e\n", fCellsAbsId[i], fCellsAmpFraction ? fCellsAmpFraction[i] : -1., fCellsMCEdepFractionMap ? fCellsMCEdepFractionMap[i] : -1.);
+    }
+  }
 }

@@ -1,4 +1,4 @@
-    /**************************************************************************
+ /**************************************************************************
  * Copyright(c) 1998-1999, ALICE Experiment at CERN, All rights reserved. *
  *                                                                        *
  * Author: The ALICE Off-line Project.                                    *
@@ -36,13 +36,17 @@
 #include <TH2D.h>
 #include <TSystem.h>
 #include <TMD5.h>
+#include <TGrid.h>
+#include <TObjString.h>
+#include "TVectorD.h"
 
-#include <AliLog.h>
+#include "AliLog.h"
 #include "AliExternalTrackParam.h"
 #include "AliVTrack.h"
 #include "AliTPCPIDResponse.h"
 #include "AliTPCdEdxInfo.h"
 #include "AliOADBContainer.h"
+#include "AliNDLocalRegression.h"
 #include "TFile.h"
 #include "TSpline.h"
 
@@ -73,6 +77,7 @@ AliTPCPIDResponse::AliTPCPIDResponse():
   fUseDatabase(kFALSE),
   fResponseFunctions(fgkNumberOfParticleSpecies*fgkNumberOfGainScenarios),
   fOADBContainer(0x0),
+  fPileupCorrection(0x0),
   fVoltageMap(72),
   fLowGainIROCthreshold(-40),
   fBadIROCthreshhold(-70),
@@ -83,7 +88,12 @@ AliTPCPIDResponse::AliTPCPIDResponse():
   fhEtaCorr(0x0),
   fhEtaSigmaPar1(0x0),
   fSigmaPar0(0.0),
+  fMultiplityEstimator(kNumberOfESDTracks),
   fCurrentEventMultiplicity(0),
+  fEventPileupProperties(),
+  fIsNewPbPbParam(kFALSE),
+  fCorrFuncSlope(0x0),
+  fCorrFuncCurv(0x0),
   fCorrFuncMultiplicity(0x0),
   fCorrFuncMultiplicityTanTheta(0x0),
   fCorrFuncSigmaMultiplicity(0x0),
@@ -93,6 +103,10 @@ AliTPCPIDResponse::AliTPCPIDResponse():
   fIROCweight(1.),
   fOROCmedWeight(1.),
   fOROClongWeight(1.),
+  fPileupCorrectionStrategy(kPileupCorrectionInExpectedSignal),
+  fPileupCorrectionRequested(kFALSE),
+  fSigmaParametrization(0x0),
+  fMultiplicityNormalization(1),
   fRecoPassNameUsed(),
   fSplineArray()
 {
@@ -103,6 +117,13 @@ AliTPCPIDResponse::AliTPCPIDResponse():
   AliLog::SetClassDebugLevel("AliTPCPIDResponse", AliLog::kInfo); 
   
   for (Int_t i=0; i<fgkNumberOfGainScenarios; i++) {fRes0[i]=0.07;fResN2[i]=0.0;}
+  
+  fEventPileupProperties[0] = 0.;
+  fEventPileupProperties[1] = 0.;
+  fEventPileupProperties[2] = 0.;
+
+  fCorrFuncSlope = new TF1("fCorrFuncSlope", "[0] + [1] * x",0,0.2);
+  fCorrFuncCurv = new TF1("fCorrFuncCurv","[0] + [1] * x",0,0.2);
   
   fCorrFuncMultiplicity = new TF1("fCorrFuncMultiplicity", 
                                   "[0] + [1]*TMath::Max([4], TMath::Min(x, [3])) + [2] * TMath::Power(TMath::Max([4], TMath::Min(x, [3])), 2)",
@@ -160,6 +181,12 @@ AliTPCPIDResponse::~AliTPCPIDResponse()
   delete fhEtaSigmaPar1;
   fhEtaSigmaPar1 = 0x0;
   
+  delete fCorrFuncSlope;
+  fCorrFuncSlope = 0x0;
+  
+  delete fCorrFuncCurv;
+  fCorrFuncCurv = 0x0;
+  
   delete fCorrFuncMultiplicity;
   fCorrFuncMultiplicity = 0x0;
   
@@ -169,6 +196,8 @@ AliTPCPIDResponse::~AliTPCPIDResponse()
   delete fCorrFuncSigmaMultiplicity;
   fCorrFuncSigmaMultiplicity = 0x0;
   if (fgInstance==this) fgInstance=0;
+
+  delete fSigmaParametrization;
 
   delete fOADBContainer;
 }
@@ -198,7 +227,11 @@ AliTPCPIDResponse::AliTPCPIDResponse(const AliTPCPIDResponse& that):
   fhEtaCorr(0x0),
   fhEtaSigmaPar1(0x0),
   fSigmaPar0(that.fSigmaPar0),
+  fMultiplityEstimator(that.fMultiplityEstimator),
   fCurrentEventMultiplicity(that.fCurrentEventMultiplicity),
+  fIsNewPbPbParam(that.fIsNewPbPbParam),
+  fCorrFuncSlope(0x0),
+  fCorrFuncCurv(0x0),
   fCorrFuncMultiplicity(0x0),
   fCorrFuncMultiplicityTanTheta(0x0),
   fCorrFuncSigmaMultiplicity(0x0),
@@ -208,12 +241,19 @@ AliTPCPIDResponse::AliTPCPIDResponse(const AliTPCPIDResponse& that):
   fIROCweight(that.fIROCweight),
   fOROCmedWeight(that.fOROCmedWeight),
   fOROClongWeight(that.fOROClongWeight),
+  fPileupCorrectionStrategy(that.fPileupCorrectionStrategy),
+  fPileupCorrectionRequested(that.fPileupCorrectionRequested),
+  fSigmaParametrization(that.fSigmaParametrization),
+  fMultiplicityNormalization(that.fMultiplicityNormalization),
   fRecoPassNameUsed(that.fRecoPassNameUsed),
   fSplineArray()
 {
   //copy ctor
-  for (Int_t i=0; i<fgkNumberOfGainScenarios; i++) {fRes0[i]=that.fRes0[i];fResN2[i]=that.fResN2[i];}
- 
+  for (Int_t i=0; i<fgkNumberOfGainScenarios; i++) {
+    fRes0[i] = that.fRes0[i];
+    fResN2[i] = that.fResN2[i];
+  }
+
   // Copy eta maps
   if (that.fhEtaCorr) {
     fhEtaCorr = new TH2D(*(that.fhEtaCorr));
@@ -226,6 +266,14 @@ AliTPCPIDResponse::AliTPCPIDResponse(const AliTPCPIDResponse& that):
   }
   
   // Copy multiplicity correction functions
+  if (that.fCorrFuncSlope) {
+    fCorrFuncSlope = new TF1(*(that.fCorrFuncSlope));
+  }
+  
+  if (that.fCorrFuncCurv) {
+    fCorrFuncCurv = new TF1(*(that.fCorrFuncCurv));
+  }  
+  
   if (that.fCorrFuncMultiplicity) {
     fCorrFuncMultiplicity = new TF1(*(that.fCorrFuncMultiplicity));
   }
@@ -261,6 +309,7 @@ AliTPCPIDResponse& AliTPCPIDResponse::operator=(const AliTPCPIDResponse& that)
   fBadOROCthreshhold=that.fBadOROCthreshhold;
   fMaxBadLengthFraction=that.fMaxBadLengthFraction;
   fMagField=that.fMagField;
+  fMultiplityEstimator=that.fMultiplityEstimator;
   fCurrentEventMultiplicity=that.fCurrentEventMultiplicity;
   for (Int_t i=0; i<fgkNumberOfGainScenarios; i++) {fRes0[i]=that.fRes0[i];fResN2[i]=that.fResN2[i];}
 
@@ -280,6 +329,18 @@ AliTPCPIDResponse& AliTPCPIDResponse::operator=(const AliTPCPIDResponse& that)
   
   fSigmaPar0 = that.fSigmaPar0;
   
+  delete fCorrFuncSlope;
+  fCorrFuncSlope = 0x0;
+  if (that.fCorrFuncSlope) {
+    fCorrFuncSlope = new TF1(*(that.fCorrFuncSlope));
+  }  
+  
+  delete fCorrFuncCurv;
+  fCorrFuncCurv = 0x0;
+  if (that.fCorrFuncCurv) {
+    fCorrFuncCurv = new TF1(*(that.fCorrFuncCurv));
+  }    
+  
   delete fCorrFuncMultiplicity;
   fCorrFuncMultiplicity = 0x0;
   if (that.fCorrFuncMultiplicity) {
@@ -298,13 +359,18 @@ AliTPCPIDResponse& AliTPCPIDResponse::operator=(const AliTPCPIDResponse& that)
     fCorrFuncSigmaMultiplicity = new TF1(*(that.fCorrFuncSigmaMultiplicity));
   }
 
-  fdEdxType      =that.fdEdxType;
-  fdEdxChargeType=that.fdEdxChargeType;
-  fdEdxWeightType=that.fdEdxWeightType;
-  fIROCweight    =that.fIROCweight;
-  fOROCmedWeight =that.fOROCmedWeight;
-  fOROClongWeight=that.fOROClongWeight;
-  fRecoPassNameUsed=that.fRecoPassNameUsed;
+  fdEdxType                  = that.fdEdxType;
+  fdEdxChargeType            = that.fdEdxChargeType;
+  fdEdxWeightType            = that.fdEdxWeightType;
+  fIROCweight                = that.fIROCweight;
+  fOROCmedWeight             = that.fOROCmedWeight;
+  fOROClongWeight            = that.fOROClongWeight;
+  fPileupCorrectionStrategy  = that.fPileupCorrectionStrategy;
+  fPileupCorrectionRequested = that.fPileupCorrectionRequested;
+  fPileupCorrectionRequested = that.fPileupCorrectionRequested;
+  fSigmaParametrization      = that.fSigmaParametrization;
+  fMultiplicityNormalization = that.fMultiplicityNormalization;
+  fRecoPassNameUsed          = that.fRecoPassNameUsed;
 
   return *this;
 }
@@ -426,7 +492,8 @@ Double_t AliTPCPIDResponse::GetExpectedSignal(const AliVTrack* track,
                                               Double_t /*dEdx*/,
                                               const TSpline3* responseFunction,
                                               Bool_t correctEta,
-                                              Bool_t correctMultiplicity) const 
+                                              Bool_t correctMultiplicity,
+                                              Bool_t usePileupCorrection) const 
 {
   // Calculates the expected PID signal as the function of 
   // the information stored in the track and the given parameters,
@@ -450,10 +517,17 @@ Double_t AliTPCPIDResponse::GetExpectedSignal(const AliVTrack* track,
     return Bethe(mom/mass) * chargeFactor;
   
   Double_t dEdxSplines = fMIP*responseFunction->Eval(mom/mass) * chargeFactor;
-    
-  if (!correctEta && !correctMultiplicity)
-    return dEdxSplines;
-  
+
+  // pilup correction
+  Double_t corrPileup = 0.;
+  if (usePileupCorrection && fPileupCorrectionStrategy == kPileupCorrectionInExpectedSignal) {
+    corrPileup = GetPileupCorrectionValue(track);
+  }
+
+  if (!correctEta && !correctMultiplicity) {
+    return dEdxSplines + corrPileup;
+  }
+
   Double_t corrFactorEta = 1.0;
   Double_t corrFactorMultiplicity = 1.0;
   
@@ -463,10 +537,11 @@ Double_t AliTPCPIDResponse::GetExpectedSignal(const AliVTrack* track,
     //corrFactorEta = GetEtaCorrectionFast(track, dEdx);
   }
   
-  if (correctMultiplicity)
+  if (correctMultiplicity) {
     corrFactorMultiplicity = GetMultiplicityCorrectionFast(track, dEdxSplines * corrFactorEta, fCurrentEventMultiplicity);
+  }
 
-  return dEdxSplines * corrFactorEta * corrFactorMultiplicity;
+  return dEdxSplines * corrFactorEta * corrFactorMultiplicity + corrPileup;
 }
 
 
@@ -475,7 +550,8 @@ Double_t AliTPCPIDResponse::GetExpectedSignal(const AliVTrack* track,
                                               AliPID::EParticleType species,
                                               ETPCdEdxSource dedxSource,
                                               Bool_t correctEta,
-                                              Bool_t correctMultiplicity) const
+                                              Bool_t correctMultiplicity,
+                                              Bool_t usePileupCorrection) const
 {
   // Calculates the expected PID signal as the function of 
   // the information stored in the track, for the specified particle type 
@@ -506,7 +582,7 @@ Double_t AliTPCPIDResponse::GetExpectedSignal(const AliVTrack* track,
   }
   
   // Charge factor already taken into account inside the following function call
-  return GetExpectedSignal(track, species, dEdx, responseFunction, correctEta, correctMultiplicity);
+  return GetExpectedSignal(track, species, dEdx, responseFunction, correctEta, correctMultiplicity, usePileupCorrection);
 }
   
 //_________________________________________________________________________
@@ -569,13 +645,19 @@ Double_t AliTPCPIDResponse::GetExpectedSigma(const AliVTrack* track,
                                              Int_t nPoints,
                                              const TSpline3* responseFunction,
                                              Bool_t correctEta,
-                                             Bool_t correctMultiplicity) const 
+                                             Bool_t correctMultiplicity,
+                                             Bool_t usePileupCorrection) const 
 {
   // Calculates the expected sigma of the PID signal as the function of 
   // the information stored in the track and the given parameters,
   // for the specified particle type 
   //
   
+  // use TF1 sigma parametrization if provided
+  if (fSigmaParametrization) {
+    return GetExpectedSigmaTF1(track, species);
+  }
+
   //if (!responseFunction)
     //return 999;
     
@@ -589,10 +671,10 @@ Double_t AliTPCPIDResponse::GetExpectedSigma(const AliVTrack* track,
   // If no sigma map is available or if no eta correction is requested (sigma maps only for corrected eta!), use the old parametrisation
   if (!fhEtaSigmaPar1 || !correctEta) {  
     if (nPoints != 0) 
-      return GetExpectedSignal(track, species, dEdx, responseFunction, kFALSE, correctMultiplicity) *
+      return GetExpectedSignal(track, species, dEdx, responseFunction, kFALSE, correctMultiplicity, usePileupCorrection) *
                fRes0[gainScenario] * sqrt(1. + fResN2[gainScenario]/nPoints);
     else
-      return GetExpectedSignal(track, species, dEdx, responseFunction, kFALSE, correctMultiplicity)*fRes0[gainScenario];
+      return GetExpectedSignal(track, species, dEdx, responseFunction, kFALSE, correctMultiplicity, usePileupCorrection)*fRes0[gainScenario];
   }
     
   if (nPoints > 0) {
@@ -601,7 +683,7 @@ Double_t AliTPCPIDResponse::GetExpectedSigma(const AliVTrack* track,
     
     if (correctMultiplicity) {
       // In addition, take into account multiplicity dependence of mean and sigma of dEdx
-      Double_t dEdxExpectedEtaCorrected = GetExpectedSignal(track, species, dEdx, responseFunction, kTRUE, kFALSE);
+      Double_t dEdxExpectedEtaCorrected = GetExpectedSignal(track, species, dEdx, responseFunction, kTRUE, kFALSE, kFALSE);
       
       // GetMultiplicityCorrection and GetMultiplicitySigmaCorrection both need the eta corrected dEdxExpected
       Double_t multiplicityCorrFactor = GetMultiplicityCorrectionFast(track, dEdxExpectedEtaCorrected, fCurrentEventMultiplicity);
@@ -612,7 +694,7 @@ Double_t AliTPCPIDResponse::GetExpectedSigma(const AliVTrack* track,
               * (sqrt(fSigmaPar0 * fSigmaPar0 + sigmaPar1 * sigmaPar1 / nPoints) * multiplicitySigmaCorrFactor);
     }
     else {
-      return GetExpectedSignal(track, species, dEdx, responseFunction, kTRUE, kFALSE)*
+      return GetExpectedSignal(track, species, dEdx, responseFunction, kTRUE, kFALSE, kFALSE)*
              sqrt(fSigmaPar0 * fSigmaPar0 + sigmaPar1 * sigmaPar1 / nPoints);
     }
   }
@@ -628,7 +710,8 @@ Double_t AliTPCPIDResponse::GetExpectedSigma(const AliVTrack* track,
                                              AliPID::EParticleType species,
                                              ETPCdEdxSource dedxSource,
                                              Bool_t correctEta,
-                                             Bool_t correctMultiplicity) const 
+                                             Bool_t correctMultiplicity,
+                                             Bool_t usePileupCorrection) const 
 {
   // Calculates the expected sigma of the PID signal as the function of 
   // the information stored in the track, for the specified particle type 
@@ -643,7 +726,7 @@ Double_t AliTPCPIDResponse::GetExpectedSigma(const AliVTrack* track,
   if (!ResponseFunctiondEdxN(track, species, dedxSource, dEdx, nPoints, gainScenario, &responseFunction))
     return 999; //TODO: better handling!
   
-  return GetExpectedSigma(track, species, gainScenario, dEdx, nPoints, responseFunction, correctEta, correctMultiplicity);
+  return GetExpectedSigma(track, species, gainScenario, dEdx, nPoints, responseFunction, correctEta, correctMultiplicity, usePileupCorrection);
 }
 
 
@@ -652,7 +735,8 @@ Float_t AliTPCPIDResponse::GetNumberOfSigmas(const AliVTrack* track,
                              AliPID::EParticleType species,
                              ETPCdEdxSource dedxSource,
                              Bool_t correctEta,
-                             Bool_t correctMultiplicity) const
+                             Bool_t correctMultiplicity,
+                             Bool_t usePileupCorrection) const
 {
   //Calculates the number of sigmas of the PID signal from the expected value
   //for a given particle species in the presence of multiple gain scenarios
@@ -666,8 +750,8 @@ Float_t AliTPCPIDResponse::GetNumberOfSigmas(const AliVTrack* track,
   if (!ResponseFunctiondEdxN(track, species, dedxSource, dEdx, nPoints, gainScenario, &responseFunction))
     return -999; //TODO: Better handling!
     
-  Double_t bethe = GetExpectedSignal(track, species, dEdx, responseFunction, correctEta, correctMultiplicity);
-  Double_t sigma = GetExpectedSigma(track, species, gainScenario, dEdx, nPoints, responseFunction, correctEta, correctMultiplicity);
+  Double_t bethe = GetExpectedSignal(track, species, dEdx, responseFunction, correctEta, correctMultiplicity, usePileupCorrection);
+  Double_t sigma = GetExpectedSigma(track, species, gainScenario, dEdx, nPoints, responseFunction, correctEta, correctMultiplicity, usePileupCorrection);
   // 999 will be returned by GetExpectedSigma e.g. in case of 0 dEdx clusters
   if (sigma >= 998) 
     return -999;
@@ -681,6 +765,7 @@ Float_t AliTPCPIDResponse::GetSignalDelta(const AliVTrack* track,
                                           ETPCdEdxSource dedxSource,
                                           Bool_t correctEta,
                                           Bool_t correctMultiplicity,
+                                          Bool_t usePileupCorrection /*= kFALSE*/,
                                           Bool_t ratio/*=kFALSE*/)const
 {
   //Calculates the number of sigmas of the PID signal from the expected value
@@ -695,7 +780,7 @@ Float_t AliTPCPIDResponse::GetSignalDelta(const AliVTrack* track,
   if (!ResponseFunctiondEdxN(track, species, dedxSource, dEdx, nPoints, gainScenario, &responseFunction))
     return -9999.; //TODO: Better handling!
 
-  const Double_t bethe = GetExpectedSignal(track, species, dEdx, responseFunction, correctEta, correctMultiplicity);
+  const Double_t bethe = GetExpectedSignal(track, species, dEdx, responseFunction, correctEta, correctMultiplicity, usePileupCorrection);
 
   Double_t delta=-9999.;
   if (!ratio) delta=dEdx-bethe;
@@ -865,56 +950,12 @@ Double_t AliTPCPIDResponse::GetEtaCorrection(const AliVTrack *track, AliPID::EPa
     return 1.; 
   
   // For the eta correction, do NOT take the multiplicity corrected value of dEdx
-  Double_t dEdxSplines = GetExpectedSignal(track, species, dEdx, responseFunction, kFALSE, kFALSE);
+  Double_t dEdxSplines = GetExpectedSignal(track, species, dEdx, responseFunction, kFALSE, kFALSE, kFALSE);
   
   //TODO Alternatively take current track dEdx
   //return GetEtaCorrectionFast(track, dEdx);
   
   return GetEtaCorrectionFast(track, dEdxSplines);
-}
-
-
-//_________________________________________________________________________
-Double_t AliTPCPIDResponse::GetEtaCorrectedTrackdEdx(const AliVTrack *track, AliPID::EParticleType species, ETPCdEdxSource dedxSource) const
-{
-  //
-  // Get eta corrected dEdx for the given track. For the correction, the expected dEdx of
-  // the specified species will be used. If the species is set to AliPID::kUnknown, the
-  // dEdx of the track is used instead.
-  // WARNING: In the latter case, the eta correction might not be as good as if the
-  // expected dEdx is used, which is the way the correction factor is designed
-  // for.
-  // In any case, one has to decide carefully to which expected signal one wants to
-  // compare the corrected value - to the corrected or uncorrected.
-  // Anyhow, a safer way of looking e.g. at the n-sigma is to call
-  // the corresponding function GetNumberOfSigmas!
-  //
-  
-  Double_t dEdx = -1;
-  Int_t nPoints = -1;
-  ETPCgainScenario gainScenario = kGainScenarioInvalid;
-  TSpline3* responseFunction = 0x0;
-  
-  // Note: In case of species == AliPID::kUnknown, the responseFunction might not be set. However, in this case
-  // it is not used anyway, so this causes no trouble.
-  if (!ResponseFunctiondEdxN(track, species, dedxSource, dEdx, nPoints, gainScenario, &responseFunction))
-    return -1.;
-  
-  Double_t etaCorr = 0.;
-  
-  if (species < AliPID::kUnknown) {
-    // For the eta correction, do NOT take the multiplicity corrected value of dEdx
-    Double_t dEdxSplines = GetExpectedSignal(track, species, dEdx, responseFunction, kFALSE, kFALSE);
-    etaCorr = GetEtaCorrectionFast(track, dEdxSplines);
-  }
-  else {
-    etaCorr = GetEtaCorrectionFast(track, dEdx);
-  }
-    
-  if (etaCorr <= 0)
-    return -1.;
-  
-  return dEdx / etaCorr; 
 }
 
 
@@ -945,7 +986,7 @@ Double_t AliTPCPIDResponse::GetSigmaPar1Fast(const AliVTrack *track, AliPID::EPa
   // of such a particle, which by assumption then has this dEdx value
   
   // For the eta correction, do NOT take the multiplicity corrected value of dEdx
-  Double_t dEdxExpected = GetExpectedSignal(track, species, dEdx, responseFunction, kFALSE, kFALSE);
+  Double_t dEdxExpected = GetExpectedSignal(track, species, dEdx, responseFunction, kFALSE, kFALSE, kFALSE);
   
   if (dEdxExpected < 1.)
     return 999;
@@ -1103,7 +1144,8 @@ Double_t AliTPCPIDResponse::GetTrackTanTheta(const AliVTrack *track) const
   //  return innerParam->GetTgl();
   //}
   
-  return TMath::Tan(-track->Theta() + TMath::Pi() / 2.0);
+  //return TMath::Tan(-track->Theta() + TMath::Pi() / 2.0);
+  return track->GetTPCTgl();
 }
 
 
@@ -1122,12 +1164,33 @@ Double_t AliTPCPIDResponse::GetMultiplicityCorrectionFast(const AliVTrack *track
     return 1.0;
   
   const Double_t dEdxExpectedInv = 1. / dEdxExpected;
-  Double_t relSlope = fCorrFuncMultiplicity->Eval(dEdxExpectedInv);
   
-  const Double_t tanTheta = GetTrackTanTheta(track);
-  relSlope += fCorrFuncMultiplicityTanTheta->Eval(tanTheta);
+  Double_t multCorrectionFactor = 1.0;
+  
+  if (!fIsNewPbPbParam) {
+    if (!track) {
+      AliError("Need track for TanTheta Info for multiplicity correction");
+      return 1.0;
+    }
+    
+    Double_t relSlope = fCorrFuncMultiplicity->Eval(dEdxExpectedInv);
+    
+    const Double_t tanTheta = GetTrackTanTheta(track);
+    relSlope += fCorrFuncMultiplicityTanTheta->Eval(tanTheta);
+    
+    multCorrectionFactor+= relSlope * multiplicity;
+  }
+  else {
+    Double_t relSlope = fCorrFuncSlope->Eval(dEdxExpectedInv);
+    Double_t relCurv = fCorrFuncCurv->Eval(dEdxExpectedInv);
+    
+    if (relCurv <= 0.0 || (multiplicity <= -relSlope/(2*relCurv))) 
+      multCorrectionFactor += relSlope * multiplicity + relCurv * multiplicity * multiplicity;
+    else
+      multCorrectionFactor -= 0.25 *relSlope * relSlope/relCurv;  
+  }
 
-  return (1. + relSlope * multiplicity);
+  return multCorrectionFactor;
 }
 
 
@@ -1154,11 +1217,55 @@ Double_t AliTPCPIDResponse::GetMultiplicityCorrection(const AliVTrack *track, Al
   
   //TODO Does it make sense to use the multiplicity correction WITHOUT eta correction?! Are the fit parameters still valid?
   // To get the expected signal to determine the multiplicity correction, do NOT ask for the multiplicity corrected value (of course)
-  Double_t dEdxExpected = GetExpectedSignal(track, species, dEdx, responseFunction, kTRUE, kFALSE);
+  Double_t dEdxExpected = GetExpectedSignal(track, species, dEdx, responseFunction, kTRUE, kFALSE, kFALSE);
   
   return GetMultiplicityCorrectionFast(track, dEdxExpected, fCurrentEventMultiplicity);
 }
 
+//_________________________________________________________________________
+Double_t AliTPCPIDResponse::GetEtaCorrectedTrackdEdx(const AliVTrack *track, AliPID::EParticleType species, ETPCdEdxSource dedxSource) const
+{
+  //
+  // Get eta corrected dEdx for the given track. For the correction, the expected dEdx of
+  // the specified species will be used. If the species is set to AliPID::kUnknown, the
+  // dEdx of the track is used instead.
+  // WARNING: In the latter case, the eta correction might not be as good as if the
+  // expected dEdx is used, which is the way the correction factor is designed
+  // for.
+  // In any case, one has to decide carefully to which expected signal one wants to
+  // compare the corrected value - to the corrected or uncorrected.
+  // Anyhow, a safer way of looking e.g. at the n-sigma is to call
+  // the corresponding function GetNumberOfSigmas!
+  //
+
+  Double_t dEdx = -1;
+  Int_t nPoints = -1;
+  ETPCgainScenario gainScenario = kGainScenarioInvalid;
+  TSpline3* responseFunction = 0x0;
+
+  // Note: In case of species == AliPID::kUnknown, the responseFunction might not be set. However, in this case
+  // it is not used anyway, so this causes no trouble.
+  if (!ResponseFunctiondEdxN(track, species, dedxSource, dEdx, nPoints, gainScenario, &responseFunction)) {
+    return -1.;
+  }
+
+  Double_t etaCorr = 0.;
+
+  if (species < AliPID::kUnknown) {
+    // For the eta correction, do NOT take the multiplicity corrected value of dEdx
+    Double_t dEdxSplines = GetExpectedSignal(track, species, dEdx, responseFunction, kFALSE, kFALSE, kFALSE);
+    etaCorr = GetEtaCorrectionFast(track, dEdxSplines);
+  }
+  else {
+    etaCorr = GetEtaCorrectionFast(track, dEdx);
+  }
+
+  if (etaCorr <= 0) {
+    return -1.;
+  }
+
+  return dEdx / etaCorr;
+}
 
 //_________________________________________________________________________
 Double_t AliTPCPIDResponse::GetMultiplicityCorrectedTrackdEdx(const AliVTrack *track, AliPID::EParticleType species, ETPCdEdxSource dedxSource) const
@@ -1199,7 +1306,7 @@ Double_t AliTPCPIDResponse::GetMultiplicityCorrectedTrackdEdx(const AliVTrack *t
   if (species < AliPID::kUnknown) {
     // To get the expected signal to determine the multiplicity correction, do NOT ask for the multiplicity corrected value (of course).
     // However, one needs the eta corrected value!
-    Double_t dEdxSplines = GetExpectedSignal(track, species, dEdx, responseFunction, kTRUE, kFALSE);
+    Double_t dEdxSplines = GetExpectedSignal(track, species, dEdx, responseFunction, kTRUE, kFALSE, kFALSE);
     multiplicityCorr = GetMultiplicityCorrectionFast(track, dEdxSplines, fCurrentEventMultiplicity);
   }
   else {
@@ -1247,7 +1354,7 @@ Double_t AliTPCPIDResponse::GetEtaAndMultiplicityCorrectedTrackdEdx(const AliVTr
     
   if (species < AliPID::kUnknown) {
     // To get the expected signal to determine the multiplicity correction, do NOT ask for the multiplicity corrected value (of course)
-    Double_t dEdxSplines = GetExpectedSignal(track, species, dEdx, responseFunction, kFALSE, kFALSE);
+    Double_t dEdxSplines = GetExpectedSignal(track, species, dEdx, responseFunction, kFALSE, kFALSE, kFALSE);
     etaCorr = GetEtaCorrectionFast(track, dEdxSplines);
     multiplicityCorr = GetMultiplicityCorrectionFast(track, dEdxSplines * etaCorr, fCurrentEventMultiplicity);
   }
@@ -1262,6 +1369,67 @@ Double_t AliTPCPIDResponse::GetEtaAndMultiplicityCorrectedTrackdEdx(const AliVTr
   return dEdx / multiplicityCorr / etaCorr;
 }
 
+Double_t AliTPCPIDResponse::GetCorrectedTrackdEdx(const AliVTrack *track, AliPID::EParticleType species, Bool_t applyEtaCorrection, Bool_t applyMultiplicityCorrection, Bool_t applyPileupCorrection, ETPCdEdxSource dedxSource)
+{
+  //
+  // see comments in GetEtaAndMultiplicityCorrectedTrackdEdx
+  //
+  Double_t dEdx = -1;
+  Int_t nPoints = -1;
+  ETPCgainScenario gainScenario = kGainScenarioInvalid;
+  TSpline3* responseFunction = 0x0;
+
+  // make sure the pileup correction is set properly
+  // The dEdx is extracted in ResponseFunctiondEdxN via GetTrackdEdx
+  ETPCPileupCorrectionStrategy tmpStrategy = fPileupCorrectionStrategy;
+
+  if (applyPileupCorrection) {
+    fPileupCorrectionStrategy = kPileupCorrectionInTrackSignal;
+  } else {
+    fPileupCorrectionStrategy = kNoPileupCorrection;
+  }
+
+  // Note: In case of species == AliPID::kUnknown, the responseFunction might not be set. However, in this case
+  // it is not used anyway, so this causes no trouble.
+  Bool_t responseResult = ResponseFunctiondEdxN(track, species, dedxSource, dEdx, nPoints, gainScenario, &responseFunction);
+
+  // reset the pileup strategy
+  fPileupCorrectionStrategy = tmpStrategy;
+
+  if (!responseResult) {
+    return -1.;
+  }
+
+  Double_t multiplicityCorr = 1.;
+  Double_t etaCorr = 1.;
+
+  if (applyEtaCorrection || applyMultiplicityCorrection) {
+    Double_t dEdxForCorrections = dEdx;
+
+    if (species < AliPID::kUnknown) {
+      // To get the expected signal to determine the multiplicity correction, do NOT ask for the multiplicity corrected value (of course)
+      dEdxForCorrections = GetExpectedSignal(track, species, dEdx, responseFunction, kFALSE, kFALSE, kFALSE);
+    }
+
+    // eta correction is required for multiplicity correction
+    etaCorr = GetEtaCorrectionFast(track, dEdxForCorrections);
+
+    if (applyMultiplicityCorrection) {
+      multiplicityCorr = GetMultiplicityCorrectionFast(track, dEdxForCorrections * etaCorr, fCurrentEventMultiplicity);
+    }
+
+    // reset etaCorr in case it is not requested in the correction
+    if (!applyEtaCorrection) {
+      etaCorr = 1.;
+    }
+  }
+
+  if (multiplicityCorr <= 0 || etaCorr <= 0) {
+    return -1.;
+  }
+
+  return dEdx / multiplicityCorr / etaCorr;
+}
 
 //_________________________________________________________________________
 Double_t AliTPCPIDResponse::GetMultiplicitySigmaCorrectionFast(Double_t dEdxExpected, Int_t multiplicity) const
@@ -1307,7 +1475,7 @@ Double_t AliTPCPIDResponse::GetMultiplicitySigmaCorrection(const AliVTrack *trac
 
   //TODO Does it make sense to use the multiplicity correction WITHOUT eta correction?! Are the fit parameters still valid?
   // To get the expected signal to determine the multiplicity correction, do NOT ask for the multiplicity corrected value (of course)
-  Double_t dEdxExpected = GetExpectedSignal(track, species, dEdx, responseFunction, kTRUE, kFALSE);
+  Double_t dEdxExpected = GetExpectedSignal(track, species, dEdx, responseFunction, kTRUE, kFALSE, kFALSE);
 
   return GetMultiplicitySigmaCorrectionFast(dEdxExpected, fCurrentEventMultiplicity);
 }
@@ -1316,16 +1484,23 @@ Double_t AliTPCPIDResponse::GetMultiplicitySigmaCorrection(const AliVTrack *trac
 Double_t AliTPCPIDResponse::GetTrackdEdx(const AliVTrack* track) const
 {
   // get dEdx of the track depending on the selected dEdx type
+  Double_t dEdx = track->GetTPCsignal();
+
   if (fdEdxType == kdEdxInfo) {
     AliTPCdEdxInfo dEdxInfo;
     if ( track->GetTPCdEdxInfo( dEdxInfo ) ) {
-      return dEdxInfo.GetWeightedMean(fdEdxChargeType, fdEdxWeightType, fIROCweight, fOROCmedWeight, fOROClongWeight);
+      dEdx = dEdxInfo.GetWeightedMean(fdEdxChargeType, fdEdxWeightType, fIROCweight, fOROCmedWeight, fOROClongWeight);
     } else {
       AliError("Could not find dEdx info, using default signal");
     }
   }
 
-  return track->GetTPCsignal();
+  if (fPileupCorrectionStrategy == kPileupCorrectionInTrackSignal) {
+    const Double_t pileUpCorrection = GetPileupCorrectionValue(track);
+    dEdx -= pileUpCorrection;
+  }
+
+  return dEdx;
 }
 
 
@@ -1612,7 +1787,9 @@ Bool_t AliTPCPIDResponse::TrackApex(const AliVTrack* track, Float_t magField, Do
   return kTRUE;
 }
 
-Double_t AliTPCPIDResponse::EvaldEdxSpline(Double_t bg,Int_t entry){
+//_____________________________________________________________________________
+Double_t AliTPCPIDResponse::EvaldEdxSpline(Double_t bg,Int_t entry)
+{
   //
   // Evaluate the dEdx response for given entry
   //
@@ -1622,7 +1799,9 @@ Double_t AliTPCPIDResponse::EvaldEdxSpline(Double_t bg,Int_t entry){
 }
 
 
-Bool_t   AliTPCPIDResponse::RegisterSpline(const char * name, Int_t index){
+//_____________________________________________________________________________
+Bool_t AliTPCPIDResponse::RegisterSpline(const char * name, Int_t index)
+{
   //
   // register spline to be used for drawing comparisons
   // 
@@ -1640,6 +1819,62 @@ Bool_t   AliTPCPIDResponse::RegisterSpline(const char * name, Int_t index){
 }
 
 //_____________________________________________________________________________
+Double_t AliTPCPIDResponse::GetPileupCorrectionValue(const AliVTrack* track) const
+{
+  //
+  // The pileup correction is an additive value. The corrected dEdx is
+  // dEdx - corrPileup
+  //
+  if (!fPileupCorrection) {
+    return 0.;
+  }
+
+  //const Double_t trackTgl = TMath::Abs(TMath::SinH(track->GetTPCTgl()));
+  const Double_t trackTgl = TMath::Abs(track->GetTgl());
+  Double_t corrVals[4] = {fEventPileupProperties[0], fEventPileupProperties[1], fEventPileupProperties[2], trackTgl};
+  const Double_t corrPileup = fPileupCorrection->Eval(corrVals) * 50;
+
+  return corrPileup;
+}
+
+//______________________________________________________________________________
+AliNDLocalRegression* AliTPCPIDResponse::GetPileupCorrectionFromFile(const TString fileName)
+{
+  if (fileName.Contains("alien://") && !gGrid) {
+    TGrid::Connect("alien");
+  }
+
+  TFile* f = TFile::Open(fileName);
+  if (!f || !f->IsOpen() || f->IsZombie()) {
+    printf("AliTPCPIDResponse::GetPileupCorrectionFromFile: Could not open pileup correction file: %s", fileName.Data());
+    delete f;
+    return 0x0;
+  }
+
+  // Assume that the only object in the file is the pileup correction
+  const Int_t numberOfKeys = f->GetListOfKeys()->GetEntries();
+  if ( numberOfKeys != 1) {
+    printf("AliTPCPIDResponse::GetPileupCorrectionFromFile: Number of objects in the file %d is not 1", numberOfKeys);
+    delete f;
+    return 0x0;
+  }
+
+  const char* objectName = f->GetListOfKeys()->At(0)->GetName();
+  TObject* o = f->Get(objectName);
+  AliNDLocalRegression* ndLocal = dynamic_cast<AliNDLocalRegression*>(o);
+  if (!ndLocal) {
+    printf("AliTPCPIDResponse::GetPileupCorrectionFromFile: Object in file %s with name %s is not of type AliNDLocalRegression but %s", fileName.Data(), objectName, o->IsA()->GetName());
+    delete f;
+    return 0x0;
+  }
+
+  ndLocal->SetName("PileupCorrection");
+
+  delete f;
+  return ndLocal;
+}
+
+//_____________________________________________________________________________
 Bool_t AliTPCPIDResponse::InitFromOADB(const Int_t run, const Int_t pass, TString passName,
                                        const char* oadbFile/*="$ALICE_PHYSICS/OADB/COMMON/PID/data/TPCPIDResponseOADB.root"*/,
                                        Bool_t initMultiplicityCorrection/*=kTRUE*/)
@@ -1650,6 +1885,8 @@ Bool_t AliTPCPIDResponse::InitFromOADB(const Int_t run, const Int_t pass, TStrin
 
   AliInfo( "----------------------| Initialisation TPC PID Response from OADB |----------------------");
   AliInfoF("----------------------| Run: %d, pass: %d - %-16s |----------------------", run, pass, passName.Data());
+  AliInfoF("---| Selected OADB file: %s |---", oadbFile);
+
   if (!fOADBContainer) {
     fOADBContainer = new AliOADBContainer("TPCSplines");
     fOADBContainer->InitFromFile(oadbFile,"TPCSplines");
@@ -1745,6 +1982,68 @@ Bool_t AliTPCPIDResponse::InitFromOADB(const Int_t run, const Int_t pass, TStrin
     SetdEdxResolutionFromString(dEdxResolutionString);
   }
 
+  //===| pileup correction |====================================================
+  // don't overwrite pileup correction in case it has been already set externally
+  if (!fPileupCorrection) {
+    const TNamed* pileupCorrectionFile = static_cast<TNamed*>(arr->FindObject("PileupCorrectionFile"));
+    if (pileupCorrectionFile) {
+      fPileupCorrectionRequested = kTRUE;
+      fPileupCorrection = GetPileupCorrectionFromFile(pileupCorrectionFile->GetTitle());
+      if (fPileupCorrection) {
+        AliInfoF("Pileup correction object loaded from file %s", pileupCorrectionFile->GetTitle());
+      } else {
+        AliErrorF("Pileup correction file name was configured (%s), but the correction object could not be loaded", pileupCorrectionFile->GetTitle());
+      }
+    } else {
+      fPileupCorrection = static_cast<AliNDLocalRegression*>(arr->FindObject("PileupCorrection"));
+      if (fPileupCorrection) {
+        fPileupCorrectionRequested = kTRUE;
+        AliInfo("Pileup correction object loaded from OADB container");
+      }
+    }
+  } else {
+    AliInfo("Pileup correction already set. Loading from OADB is skipped");
+  }
+
+  //===| multiplity estimator |=================================================
+  const TNamed *multEstimatorDef=static_cast<TNamed*>(arr->FindObject("MultiplicityEstimator"));
+  if (multEstimatorDef) {
+    const TString multEstimator(multEstimatorDef->GetTitle());
+    fMultiplityEstimator = (EMultiplicityEstimator)multEstimator.Atoi();
+    const TString names[2] = {"kNumberOfESDTracks", "kNTPCTrackBeforeClean"};
+    AliInfoF("Setting multiplicity estimator %d (%s)", (Int_t)fMultiplityEstimator, names[fMultiplityEstimator].Data());
+  }
+
+  //===| sigma parametrization TF1 |============================================
+  TObjArray* arrSigmaParam = dynamic_cast<TObjArray*>(arr->FindObject("SigmaParametrization"));
+  if (arrSigmaParam) {
+    if (arrSigmaParam->GetEntriesFast() != 3) {
+      AliFatalF("Number of entries for TF1 Sigma parametrization (%d) does not match expectation (3)", arrSigmaParam->GetEntriesFast());
+    }
+
+    const TNamed* tf1Sigma = dynamic_cast<TNamed*>(arrSigmaParam->FindObject("SigmaParametrization"));
+    const TVectorD* tf1SigmaParams = dynamic_cast<TVectorD*>(arrSigmaParam->At(1));
+    const TNamed *multiplicityNormalization = dynamic_cast<TNamed*>(arrSigmaParam->FindObject("MultiplicityNormalization"));
+
+    if (!(tf1Sigma && tf1SigmaParams && multiplicityNormalization)) {
+      AliFatalF("Expected input for TF1 sigma parametrization missing, function definition (%p), function parameters (%p), multiplicity Normalization (%p)", tf1Sigma, tf1SigmaParams, multiplicityNormalization);
+    }
+
+    fSigmaParametrization  = new TF1(tf1Sigma->GetName(), tf1Sigma->GetTitle());
+    fSigmaParametrization->SetParameters(tf1SigmaParams->GetMatrixArray());
+
+    TString params;
+    for (int ipar = 0; ipar<fSigmaParametrization->GetNpar(); ++ipar) {
+      params += TString::Format("%.4g, ", fSigmaParametrization->GetParameter(ipar));
+    }
+    fMultiplicityNormalization = TString(multiplicityNormalization->GetTitle()).Atof();
+
+    AliInfo("This error in TF1 can be ignored: 'has dimension 7 instead of 1'");
+    AliInfoF("Setting sigma parametrization function %s", fSigmaParametrization->GetTitle());
+    AliInfoF("Setting sigma parametrization parameters %s", params.Data());
+    AliInfoF("Setting multiplicity normalization %.2f", fMultiplicityNormalization);
+  }
+
   return kTRUE;
 }
 
@@ -1803,19 +2102,29 @@ Bool_t AliTPCPIDResponse::SetMultiplicityCorrectionFromString(const TString& mul
   if (!(arrParameters=GetMultiplicityCorrectionArrayFromString(multiplicityData))) {
     return kFALSE;
   }
+  
+  if (((TObjString*)arrParameters->At(arrParameters->GetLast()))->String() == "1") {
+    fIsNewPbPbParam = kTRUE;
+  }
 
   TString log("Setting multiplicity correction parameters for mean; tan theta; sigma: ");
   log.Append(multiplicityData);
   AliInfo(log.Data());
-
+  
   const TObjArray *arrPar1 = static_cast<TObjArray*>(arrParameters->At(0));
   for (Int_t ipar=0; ipar<arrPar1->GetEntriesFast(); ++ipar) {
-    SetParameterMultiplicityCorrection(ipar, static_cast<TObjString*>(arrPar1->At(ipar))->String().Atof());
+    if (fIsNewPbPbParam) 
+      SetParameterMultSlope(ipar, static_cast<TObjString*>(arrPar1->At(ipar))->String().Atof());
+    else
+      SetParameterMultiplicityCorrection(ipar, static_cast<TObjString*>(arrPar1->At(ipar))->String().Atof());
   }
 
   const TObjArray *arrPar2 = static_cast<TObjArray*>(arrParameters->At(1));
   for (Int_t ipar=0; ipar<arrPar2->GetEntriesFast(); ++ipar) {
-    SetParameterMultiplicityCorrectionTanTheta(ipar, static_cast<TObjString*>(arrPar2->At(ipar))->String().Atof());
+    if (fIsNewPbPbParam) 
+      SetParameterMultCurv(ipar, static_cast<TObjString*>(arrPar2->At(ipar))->String().Atof());
+    else    
+      SetParameterMultiplicityCorrectionTanTheta(ipar, static_cast<TObjString*>(arrPar2->At(ipar))->String().Atof());
   }
 
   const TObjArray *arrPar3 = static_cast<TObjArray*>(arrParameters->At(2));
@@ -1835,9 +2144,12 @@ TObjArray* AliTPCPIDResponse::GetMultiplicityCorrectionArrayFromString(const TSt
   // where parMC are the parameters for AliTPCPIDResponse::SetParameterMultiplicityCorrection
   // parMCTT are the parameters for AliTPCPIDResponse::SetParameterMultiplicityCorrectionTanTheta
   // parMSC are the parameters for AliTPCPIDResponse::SetParameterMultiplicitySigmaCorrection
+  
+  //For the new PbPb parametrization it should be in the following format: parMC_0,parMC1;parMCC_0,parMCC_1;parMSC_0,parMSC_1,parMSC_2, parMSC_3 where parMC_i are the parameters for the Slope parametrization and parMCC_i the parameters for the curvature parametrization
 
   const Int_t nSets=3;
-  const Int_t nPars[nSets]={5,3,4};
+  const Int_t nPars_0[nSets]={5,3,4};
+  const Int_t nPars_1[nSets]={2,2,4};
 
   AliTPCPIDResponse temp;
   TObjArray *arrCorrectionSets = corrections.Tokenize(";");
@@ -1846,21 +2158,36 @@ TObjArray* AliTPCPIDResponse::GetMultiplicityCorrectionArrayFromString(const TSt
     delete arrCorrectionSets;
     return 0x0;
   }
-
+  
   for (Int_t iset=0 ;iset<nSets; ++iset) {
     TObjString *string=(TObjString*)arrCorrectionSets->RemoveAt(iset);
     TObjArray *arrTmp=string->String().Tokenize(",");
     delete string;
     string=0x0;
 
-    if (arrTmp->GetEntriesFast() != nPars[iset]){
-      temp.Error("AliTPCPIDResponse::CheckMultiplicityCorrectionString","Number of parameters in set %d not equal to %d. Please read documentation of this function", iset, nPars[iset]);
+    if (arrTmp->GetEntriesFast() != nPars_0[iset] && arrTmp->GetEntriesFast() != nPars_1[iset]){
+      temp.Error("AliTPCPIDResponse::CheckMultiplicityCorrectionString","Number of parameters in set %d not equal to %d or %d. Please read documentation of this function", iset, nPars_0[iset], nPars_1[iset]);
       delete arrCorrectionSets;
       delete arrTmp;
       return 0x0;
     }
 
     arrCorrectionSets->AddAt(arrTmp, iset);
+  }
+  
+  Bool_t matchesParSet = kTRUE;
+  for (Int_t iset=0;iset<nSets;++iset) 
+    matchesParSet = matchesParSet && ((TObjArray*)arrCorrectionSets->At(iset))->GetEntriesFast() == nPars_0[iset];
+  
+  if (matchesParSet)
+    arrCorrectionSets->AddLast(new TObjString("0"));
+  else {
+    matchesParSet = kTRUE;
+    for (Int_t iset=0;iset<nSets;++iset) {
+      matchesParSet = matchesParSet && ((TObjArray*)arrCorrectionSets->At(iset))->GetEntriesFast() == nPars_1[iset];
+    }
+    if (matchesParSet)
+      arrCorrectionSets->AddLast(new TObjString("1"));
   }
 
   return arrCorrectionSets;
@@ -1982,4 +2309,72 @@ TString AliTPCPIDResponse::GetChecksum(const TObject* obj)
   gSystem->Exec(Form("rm -rf %s", uniquePathName.Data()));
 
   return checksum;
+}
+
+Double_t AliTPCPIDResponse::GetExpectedSigmaTF1(const AliVTrack* track, AliPID::EParticleType species, Int_t dEdxType) const
+{
+  Double_t values[7];
+  GetTF1ParametrizationValues(values, track, species, dEdxType);
+  return fSigmaParametrization->EvalPar(values)*(fMIP/values[0]);
+}
+
+void AliTPCPIDResponse::GetTF1ParametrizationValues(Double_t values[7], const AliVTrack* track, AliPID::EParticleType species, Int_t dEdxType) const
+{
+  const Double_t maxCl[5] = {63, 64, 32, 96, 159};
+  const Double_t ncl = track->GetTPCsignalN();
+  const Double_t p = track->GetTPCmomentum();
+  const Double_t bg = p / AliPID::ParticleMassZ(Int_t(species));
+  const Double_t bbAlpeh = AliExternalTrackParam::BetheBlochAleph(bg);
+
+  // values[0] = fMIP / bbAlpeh;   // bbAlelp is already normalized to the MIP
+  values[0] = 1. / bbAlpeh;
+  values[1] = track->GetTPCTgl();
+  values[2] = track->GetTPCmomentum();
+  values[3] = Double_t(species);
+  values[4] = track->GetInnerParam() ? track->GetInnerParam()->GetSigned1Pt() : track->GetSigned1Pt();
+  values[5] = TMath::Sqrt(maxCl[dEdxType]  / ncl);
+  values[6] = fCurrentEventMultiplicity / fMultiplicityNormalization;
+}
+
+
+/// This is the empirical ALEPH parameterization of the Bethe-Bloch formula.
+/// Compared to the  AliExternalTrackParam::BetheBlochAleph here it is save version not failing in minimization
+/// \param bg    - beta gamma
+/// \param kp1
+/// \param kp2
+/// \param kp3
+/// \param kp4
+/// \param kp5
+/// \return
+Double_t  AliTPCPIDResponse::BetheBlochAleph(Double_t bg, Double_t kp1, Double_t kp2, Double_t kp3, Double_t kp4, Double_t kp5){
+  //
+  // It is normalized to 1 at the minimum.
+  //
+  if (bg<0) return 0;
+  const Double_t kEpsilon=1e-12;
+  Double_t beta = bg/TMath::Sqrt(1.+ bg*bg);
+  if (beta<kEpsilon) beta=kEpsilon;
+  if (bg<kEpsilon) bg=kEpsilon;
+  Double_t aa = TMath::Power(beta,kp4);
+  Double_t bb = TMath::Power(1./bg,kp5);
+  bb=TMath::Log(TMath::Abs(kp3+bb));
+  return (kp2-aa-bb)*kp1/aa;
+}
+
+
+/// returns relative dEdx resolution contribution due relative pt resolution
+/// defualt pt resolution 1% * sqrt(dEdx)
+/// \param p        - particle momenta
+/// \param PID      - particle PID
+/// \param resol    - elative resolution - at low pt should be ~ 1 per MIP
+/// \return
+double AliTPCPIDResponse::sigmadEdxPt(double p, double PID, double resol ){
+  Double_t mass =AliPID::ParticleMass(PID);
+  double bg = p/mass;
+  double dEdx = AliExternalTrackParam::BetheBlochAleph(bg);
+  double deltaP=resol*TMath::Sqrt(dEdx);
+  double bgDelta=p*(1+deltaP)/mass;
+  double dEdx2=AliExternalTrackParam::BetheBlochAleph(bgDelta);
+  double deltaRel = TMath::Abs(dEdx2-dEdx)/dEdx;
+  return deltaRel;
 }

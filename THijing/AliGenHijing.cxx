@@ -48,7 +48,7 @@ AliGenHijing::AliGenHijing()
      fQuench(1),
      fShadowing(1),
      fDecaysOff(3),
-     fTrigger(0),     
+     fTrigger(0),
      fEvaluate(0),
      fSelectAll(0),
      fFlavor(0),
@@ -78,16 +78,19 @@ AliGenHijing::AliGenHijing()
      fNoHeavyQuarks(kFALSE),
      fHeader(AliGenHijingEventHeader("Hijing")),
      fSigmaNN(-1),
-     fNoElas(0),
-     fDataFragmentation(kFALSE),
+     fNoElas(1),
+     fDataFragmentation(kTRUE),
      fFreeProjSpecn(0),
      fFreeProjSpecp(0),
      fFreeTargSpecn(0),
      fFreeTargSpecp(0),
      fFragmNeutrons(0x0),
      fFragmProtons(0x0),
+     fFragmNWidth(0x0),
+     fFragmPWidth(0x0),
      fEConv(1),
-     fMissing(50)
+     fMissing(50),
+     fFlipPzSign(kFALSE)
 {
   // Constructor
   fEnergyCMS = 5500.;
@@ -103,7 +106,7 @@ AliGenHijing::AliGenHijing(Int_t npart)
      fQuench(1),
      fShadowing(1),
      fDecaysOff(3),
-     fTrigger(0),     
+     fTrigger(0),
      fEvaluate(0),
      fSelectAll(0),
      fFlavor(0),
@@ -133,16 +136,19 @@ AliGenHijing::AliGenHijing(Int_t npart)
      fNoHeavyQuarks(kFALSE),
      fHeader(AliGenHijingEventHeader("Hijing")),
      fSigmaNN(-1),
-     fNoElas(0),
-     fDataFragmentation(kFALSE),
+     fNoElas(1),
+     fDataFragmentation(kTRUE),
      fFreeProjSpecn(0),
      fFreeProjSpecp(0),
      fFreeTargSpecn(0),
      fFreeTargSpecp(0),
      fFragmNeutrons(0x0),
      fFragmProtons(0x0),
+     fFragmNWidth(0x0),
+     fFragmPWidth(0x0),
      fEConv(1),
-     fMissing(50)
+     fMissing(50),
+     fFlipPzSign(kFALSE)     
 {
 // Default PbPb collisions at 5. 5 TeV
 //
@@ -151,16 +157,16 @@ AliGenHijing::AliGenHijing(Int_t npart)
     fTitle= "Particle Generator using HIJING";
 //
 //
-// Set random number generator   
+// Set random number generator
     AliHijingRndm::SetHijingRandom(GetRandom());
-    
+
 }
 
 AliGenHijing::~AliGenHijing()
 {
 // Destructor
-    if ( fDsigmaDb) delete  fDsigmaDb;  
-    if ( fDnDb)     delete  fDnDb;  
+    if ( fDsigmaDb) delete  fDsigmaDb;
+    if ( fDnDb)     delete  fDnDb;
 }
 
 void AliGenHijing::Init()
@@ -168,32 +174,35 @@ void AliGenHijing::Init()
 // Initialisation
 
     // Coeffs to go from mm / mm to meter / second
-    SetGeneratorUnitsForMeterSecond(1.e-3, 1e-3/TMath::C()); 
-  
+    SetGeneratorUnitsForMeterSecond(1.e-3, 1e-3/TMath::C());
+
     fFrame.Resize(8);
     fTarget.Resize(8);
     fProjectile.Resize(8);
-    
-    SetMC(new THijing(fEnergyCMS, fFrame, fProjectile, fTarget, 
-		      fAProjectile, fZProjectile, fATarget, fZTarget, 
+
+    SetMC(new THijing(fEnergyCMS, fFrame, fProjectile, fTarget,
+		      fAProjectile, fZProjectile, fATarget, fZTarget,
 		      fMinImpactParam, fMaxImpactParam));
 
     fHijing=(THijing*) fMCEvGen;
     fHijing->SetIHPR2(2,  fRadiation);
     fHijing->SetIHPR2(3,  fTrigger);
     fHijing->SetIHPR2(6,  fShadowing);
-    fHijing->SetIHPR2(12, fDecaysOff);    
+    fHijing->SetIHPR2(12, fDecaysOff);
     fHijing->SetIHPR2(21, fKeep);
-    fHijing->SetHIPR1(8,  fPtHardMin); 	
-    fHijing->SetHIPR1(9,  fPtHardMax); 	
-    fHijing->SetHIPR1(10, fPtMinJet); 
+    fHijing->SetHIPR1(8,  fPtHardMin);
+    fHijing->SetHIPR1(9,  fPtHardMax);
+    fHijing->SetHIPR1(10, fPtMinJet);
     if (fSigmaNN>0)
-      fHijing->SetHIPR1(31, fSigmaNN/2.); 	
+      fHijing->SetHIPR1(31, fSigmaNN/2.);
     fHijing->SetHIPR1(50, fSimpleJet);
     //
     // Switching off elastic scattering
-    if (fNoElas)
+    // By deafult it is off
+    if (fNoElas) {
       fHijing->SetIHPR2(14, 0);
+      printf("\n Elastic scattering between N-N pairs is switched off. \n");
+    }
 //
 //  Quenching
 //
@@ -205,7 +214,7 @@ void AliGenHijing::Init()
 //  fQuench = 4:  new LHC  parameters with log(e) dependence
 //  fQuench = 5:  new RHIC parameters with log(e) dependence
     fHijing->SetIHPR2(50, 0);
-    if (fQuench > 0) 
+    if (fQuench > 0)
 	fHijing->SetIHPR2(4,  1);
     else
 	fHijing->SetIHPR2(4,  0);
@@ -225,35 +234,40 @@ void AliGenHijing::Init()
 	fHijing->SetHIPR1(14, 0.34);
 	fHijing->SetHIPR1(11, 2.5);
     }
-    
+
 //
 // Heavy quarks
-//    
+//
     if (fNoHeavyQuarks) {
 	fHijing->SetIHPR2(49, 1);
     } else {
 	fHijing->SetIHPR2(49, 0);
     }
-    
+
     if(fDataFragmentation){
-      TFile *file = TFile::Open("$ALICE_ROOT/ZDC/fragmSpecDataDriven.root","READ");
+      //TFile *file = TFile::Open("$ALICE_ROOT/ZDC/fragmSpecDataDriven.root","READ"); //old 2.76 TeV data
+      TFile *file = TFile::Open("$ALICE_ROOT/ZDC/fragmentsDD5TeV.root","READ");
       if(!file->IsOpen()){
-        AliError("Could not open file $ALICE_ROOT/ZDC/fragmSpecDataDriven.root");
+        AliError("Could not open file $ALICE_ROOT/ZDC/fragmentsDD5TeV.root");
       }
-      fFragmNeutrons = dynamic_cast<TF1*> (file->Get("funcorrn"));
-      fFragmProtons = dynamic_cast<TF1*> (file->Get("funcorrp"));
+      //fFragmNeutrons = dynamic_cast<TF1*> (file->Get("funcorrn")); //old 2.76 TeV data
+      //fFragmProtons = dynamic_cast<TF1*> (file->Get("funcorrp")); //old 2.76 TeV data
+      fFragmNeutrons = dynamic_cast<TF1*> (file->Get("fneu"));
+      fFragmProtons = dynamic_cast<TF1*> (file->Get("fitfunp"));
+      fFragmNWidth = dynamic_cast<TF1*> (file->Get("ferrn"));
+      fFragmPWidth = dynamic_cast<TF1*> (file->Get("ferrp"));
     }
 
     // deal with energy/momentun conservation and counting of errors in hijhrd
     fHijing->SetIHPR2(31,fEConv);
     if (fMissing>0)
       fHijing->SetIHPR2(30,fMissing);
-    
+
     AliGenMC::Init();
-    
+
 //
-//  Initialize Hijing  
-//    
+//  Initialize Hijing
+//
     fHijing->Initialize();
 //
     if (fEvaluate) EvaluateCrossSections();
@@ -283,11 +297,11 @@ void AliGenHijing::Generate()
   Int_t jev = 0;
   Int_t j=0, kf=0, ks=0, ksp=0, imo=0;
   kf = 0;
-    
 
-    
+
+
   fTrials = 0;
-  
+
   for (j = 0;j < 3; j++) origin0[j] = fOrigin[j];
   time0 = fTimeOrigin;
 
@@ -295,7 +309,7 @@ void AliGenHijing::Generate()
       Vertex();
       for (j=0; j < 3; j++) origin0[j] = fVertex[j];
       time0 = fTime;
-  } 
+  }
 
 
   Float_t sign = (fRandomPz && (Rndm() < 0.5))? -1. : 1.;
@@ -304,9 +318,9 @@ void AliGenHijing::Generate()
   {
 //    Generate one event
 // --------------------------------------------------------------------------
-      fProjectileSpecn    = 0;  
+      fProjectileSpecn    = 0;
       fProjectileSpecp    = 0;
-      fTargetSpecn        = 0;  
+      fTargetSpecn        = 0;
       fTargetSpecp        = 0;
 // --------------------------------------------------------------------------
       fHijing->GenerateEvent();
@@ -317,8 +331,8 @@ void AliGenHijing::Generate()
 	  if (!CheckTrigger()) continue;
       }
       if (fLHC) Boost();
-      
-      
+
+
       Int_t np = fParticles.GetEntriesFast();
       Int_t nc = 0;
       if (np == 0 ) continue;
@@ -330,11 +344,11 @@ void AliGenHijing::Generate()
 	  newPos[i]    = i;
 	  pSelected[i] = 0;
       }
-      
+
 //      Get event vertex
 //
       fVertex[0] = origin0[0];
-      fVertex[1] = origin0[1];	
+      fVertex[1] = origin0[1];
       fVertex[2] = origin0[2];
       fTime = time0;
 //
@@ -349,17 +363,17 @@ void AliGenHijing::Generate()
 //
 	  Bool_t  selected             =  kTRUE;
 	  Bool_t  hasSelectedDaughters =  kFALSE;
-	  
-	  
+
+
 	  kf        = iparticle->GetPdgCode();
 	  ks        = iparticle->GetStatusCode();
 	  if (kf == 92) continue;
-	    
-          if (!fSelectAll) selected = KinematicSelection(iparticle, 0) && 
+
+          if (!fSelectAll) selected = KinematicSelection(iparticle, 0) &&
 	  		       SelectFlavor(kf);
 	  hasSelectedDaughters = DaughtersSelection(iparticle);
 //
-// Put particle on the stack if it is either selected or 
+// Put particle on the stack if it is either selected or
 // it is the mother of at least one seleted particle
 //
 	  if (selected || hasSelectedDaughters) {
@@ -375,12 +389,12 @@ void AliGenHijing::Generate()
 	  iparticle = (TParticle *) fParticles.At(i);
 // Is this a final state particle ?
 	  if (!Stable(iparticle)) continue;
-      
+
 	  Bool_t  selected             =  kTRUE;
 	  kf        = iparticle->GetPdgCode();
 	  ks        = iparticle->GetStatusCode();
 	  ksp       = iparticle->GetUniqueID();
-	  
+
 // --------------------------------------------------------------------------
 // Count spectator neutrons and protons
 	  if(ksp == 0 || ksp == 1){
@@ -392,7 +406,7 @@ void AliGenHijing::Generate()
 	      if(kf == kProton)  fTargetSpecp += 1;
 	  }
 // --------------------------------------------------------------------------
-//	    
+//
 	  if (!fSelectAll) {
 	      selected = KinematicSelection(iparticle,0)&&SelectFlavor(kf);
 	      if (!fSpectators && selected) selected = (ksp != 0 && ksp != 1 && ksp != 10
@@ -406,15 +420,15 @@ void AliGenHijing::Generate()
 	      pSelected[i] = 1;
 	  } // selected
       } // particle loop final state
-      
+
       if(fDataFragmentation){
          Float_t impPar = fHijing->GetBB();
-         fFreeProjSpecn = FreeSpectatorsn(impPar, fProjectileSpecn);
-         fFreeProjSpecp = FreeSpectatorsp(impPar, fProjectileSpecp);
-         fFreeTargSpecn = FreeSpectatorsn(impPar, fTargetSpecn);
-         fFreeTargSpecp = FreeSpectatorsp(impPar, fTargetSpecp);
+         fFreeProjSpecn = FreeSpectatorsn(impPar);
+         fFreeProjSpecp = FreeSpectatorsp(impPar);
+         fFreeTargSpecn = FreeSpectatorsn(impPar);
+         fFreeTargSpecp = FreeSpectatorsp(impPar);
 	 //
-	 printf("\n b %f fm - SPECTATORS* HIJING:  %d  %d  %d  %d  ->  DATA:   %d  %d  %d  %d \n", impPar, fProjectileSpecn, fProjectileSpecp, fTargetSpecn, fTargetSpecp, fFreeProjSpecn, fFreeProjSpecp, fFreeTargSpecn, fFreeTargSpecp);
+	 printf("\n b %f fm - SPECTATORS: DATA DRIVEN:   %d  %d  %d  %d \n", impPar, fFreeProjSpecn, fFreeProjSpecp, fFreeTargSpecn, fFreeTargSpecp);
       }
 //
 // Write particles to stack
@@ -436,14 +450,21 @@ void AliGenHijing::Generate()
 	      origin[2] = origin0[2]+iparticle->Vz()/10;
 	      tof = time0+kconv * iparticle->T();
 
+	      if(fFlipPzSign){
+		p[2] = -p[2];
+		origin[2] = origin0[2] - iparticle->Vz()/10;
+	      }
+
+	      
 	      imo = -1;
 	      TParticle* mother = 0;
 	      if (hasMother) {
 		  imo = iparticle->GetFirstMother();
 		  mother = (TParticle *) fParticles.At(imo);
 		  imo = (mother->GetPdgCode() != 92) ? newPos[imo] : -1;
-	      } // if has mother   
+	      } // if has mother
 	      Bool_t tFlag = (fTrackIt && !hasDaughter);
+	      // Don't put in the stack a no. of spectators larger than the number of free spectators
 	      if(fDataFragmentation && (ksp==0 || ksp==1) && kf == kNeutron){ // Projectile neutrons
 	         countSpecPn++;
 		 if(countSpecPn>fFreeProjSpecn) continue;
@@ -465,14 +486,16 @@ void AliGenHijing::Generate()
 		 //printf(" Putting spec.p from targ. %d into the stack\n", countSpecTp);
 	      }
 	      PushTrack(tFlag,imo,kf,p,origin,polar,tof,kPNoProcess,nt, 1., ks);
-	      fNprimaries++;
-	      KeepTrack(nt);
+	      if (nt>=0) {
+		fNprimaries++;
+		KeepTrack(nt);
+	      }
 	      newPos[i] = nt;
 	  } // if selected
       } // particle loop
       delete[] newPos;
       delete[] pSelected;
-      
+
       AliInfo(Form("\n I've put %i particles on the stack \n",nc));
       if (nc > 0) {
 	  jev += nc;
@@ -498,9 +521,9 @@ void AliGenHijing::EvaluateCrossSections()
 //     Glauber Calculation of geometrical x-section
 //
     Float_t xTot       = 0.;          // barn
-    Float_t xTotHard   = 0.;          // barn 
+    Float_t xTotHard   = 0.;          // barn
     Float_t xPart      = 0.;          // barn
-    Float_t xPartHard  = 0.;          // barn 
+    Float_t xPartHard  = 0.;          // barn
     Float_t sigmaHard  = 0.1;         // mbarn
     Float_t bMin       = 0.;
     Float_t bMax       = fHijing->GetHIPR1(34)+fHijing->GetHIPR1(35);
@@ -509,14 +532,14 @@ void AliGenHijing::EvaluateCrossSections()
 
 
     printf("\n Projectile Radius (fm): %f \n",fHijing->GetHIPR1(34));
-    printf("\n Target     Radius (fm): %f \n",fHijing->GetHIPR1(35));    
-    printf("\n Inelastic and total cross section (mb) %f %f \n",fHijing->GetHINT1(12), fHijing->GetHINT1(13));    
+    printf("\n Target     Radius (fm): %f \n",fHijing->GetHIPR1(35));
+    printf("\n Inelastic and total cross section (mb) %f %f \n",fHijing->GetHINT1(12), fHijing->GetHINT1(13));
     Int_t i;
     Float_t oldvalue= 0.;
 
     Float_t* b   = new Float_t[kMax];
-    Float_t* si1 = new Float_t[kMax];    
-    Float_t* si2 = new Float_t[kMax];    
+    Float_t* si1 = new Float_t[kMax];
+    Float_t* si2 = new Float_t[kMax];
     for (i = 0; i < kMax; i++){
       b[i] = 0.;
       si1[i] = 0.;
@@ -533,13 +556,13 @@ void AliGenHijing::EvaluateCrossSections()
 	xTot+=gb;
 	xTotHard += gbh;
 	printf("profile %f %f %f\n", xb, ov, fHijing->GetHINT1(12));
-	
+
 	if (xb > fMinImpactParam && xb < fMaxImpactParam)
 	{
 	    xPart += gb;
 	    xPartHard += gbh;
 	}
-	
+
 	if(oldvalue) if ((xTot-oldvalue)/oldvalue<0.0001) break;
 	oldvalue = xTot;
 	printf("\n Total cross section (barn): %d %f %f \n",i, xb, xTot);
@@ -560,7 +583,7 @@ void AliGenHijing::EvaluateCrossSections()
     b[0] = 0;
     si1[0] = 0;
     si2[0]=si2[1];
-    
+
     fDsigmaDb  = new TGraph(i, b, si1);
     fDnDb      = new TGraph(i, b, si2);
 }
@@ -578,9 +601,9 @@ Bool_t AliGenHijing::DaughtersSelection(const TParticle* iparticle)
     Bool_t selected = kFALSE;
     if (hasDaughters) {
 	imin = iparticle->GetFirstDaughter();
-	imax = iparticle->GetLastDaughter();       
+	imax = iparticle->GetLastDaughter();
 	for (i = imin; i <= imax; i++){
-	    TParticle *  jparticle = (TParticle *) fParticles.At(i);	
+	    TParticle *  jparticle = (TParticle *) fParticles.At(i);
 	    Int_t ip = jparticle->GetPdgCode();
 	    if (KinematicSelection(jparticle,0)&&SelectFlavor(ip)) {
 		selected=kTRUE; break;
@@ -601,7 +624,7 @@ Bool_t AliGenHijing::SelectFlavor(Int_t pid)
 // 4: charm and beauty
 // 5: beauty
     Bool_t res = 0;
-    
+
     if (fFlavor == 0) {
 	res = kTRUE;
     } else {
@@ -611,7 +634,7 @@ Bool_t AliGenHijing::SelectFlavor(Int_t pid)
     }
 //
 //  This part if gamma writing is inhibited
-    if (fNoGammas) 
+    if (fNoGammas)
 	res = res && (pid != kGamma && pid != kPi0);
 //
     return res;
@@ -621,7 +644,7 @@ Bool_t AliGenHijing::Stable(const TParticle*  particle) const
 {
 // Return true for a stable particle
 //
-    
+
     if (particle->GetFirstDaughter() < 0 )
     {
 	return kTRUE;
@@ -652,22 +675,22 @@ void AliGenHijing::MakeHeader()
 // 4-momentum vectors of the triggered jets.
 //
 // Before final state gluon radiation.
-    TLorentzVector* jet1 = new TLorentzVector(fHijing->GetHINT1(21), 
+    TLorentzVector* jet1 = new TLorentzVector(fHijing->GetHINT1(21),
 					      fHijing->GetHINT1(22),
 					      fHijing->GetHINT1(23),
 					      fHijing->GetHINT1(24));
 
-    TLorentzVector* jet2 = new TLorentzVector(fHijing->GetHINT1(31), 
+    TLorentzVector* jet2 = new TLorentzVector(fHijing->GetHINT1(31),
 					      fHijing->GetHINT1(32),
 					      fHijing->GetHINT1(33),
 					      fHijing->GetHINT1(34));
 // After final state gluon radiation.
-    TLorentzVector* jet3 = new TLorentzVector(fHijing->GetHINT1(26), 
+    TLorentzVector* jet3 = new TLorentzVector(fHijing->GetHINT1(26),
 					      fHijing->GetHINT1(27),
 					      fHijing->GetHINT1(28),
 					      fHijing->GetHINT1(29));
 
-    TLorentzVector* jet4 = new TLorentzVector(fHijing->GetHINT1(36), 
+    TLorentzVector* jet4 = new TLorentzVector(fHijing->GetHINT1(36),
 					      fHijing->GetHINT1(37),
 					      fHijing->GetHINT1(38),
 					      fHijing->GetHINT1(39));
@@ -697,7 +720,7 @@ void AliGenHijing::MakeHeader()
     fHeader.SetFreeSpectators(fFreeProjSpecn, fFreeProjSpecp, fFreeTargSpecn, fFreeTargSpecp);
     fHeader.SetSpectatorsInTheStack(fSpectators);
     fHeader.SetDataFromFragmentation(fDataFragmentation);
-	    
+
     AddHeader(&fHeader);
     fCollisionGeometry = &fHeader;
 }
@@ -708,17 +731,17 @@ Bool_t AliGenHijing::CheckTrigger()
 // Check the kinematic trigger condition
 //
     Bool_t   triggered = kFALSE;
- 
+
     if (fTrigger == 1) {
 //
-//  jet-jet Trigger	
-	
-	TLorentzVector* jet1 = new TLorentzVector(fHijing->GetHINT1(26), 
+//  jet-jet Trigger
+
+	TLorentzVector* jet1 = new TLorentzVector(fHijing->GetHINT1(26),
 						  fHijing->GetHINT1(27),
 						  fHijing->GetHINT1(28),
 						  fHijing->GetHINT1(29));
-	
-	TLorentzVector* jet2 = new TLorentzVector(fHijing->GetHINT1(36), 
+
+	TLorentzVector* jet2 = new TLorentzVector(fHijing->GetHINT1(36),
 						  fHijing->GetHINT1(37),
 						  fHijing->GetHINT1(38),
 						  fHijing->GetHINT1(39));
@@ -729,12 +752,12 @@ Bool_t AliGenHijing::CheckTrigger()
 //    printf("\n Trigger: %f %f %f %f",
 //	   fEtaMinJet, fEtaMaxJet, fPhiMinJet, fPhiMaxJet);
 	if (
-	    (eta1 < fEtaMaxJet && eta1 > fEtaMinJet &&  
-	     phi1 < fPhiMaxJet && phi1 > fPhiMinJet) 
+	    (eta1 < fEtaMaxJet && eta1 > fEtaMinJet &&
+	     phi1 < fPhiMaxJet && phi1 > fPhiMinJet)
 	    ||
-	    (eta2 < fEtaMaxJet && eta2 > fEtaMinJet &&  
+	    (eta2 < fEtaMaxJet && eta2 > fEtaMinJet &&
 	     phi2 < fPhiMaxJet && phi2 > fPhiMinJet)
-	    ) 
+	    )
 	    triggered = kTRUE;
     } else if (fTrigger == 2) {
 //  Gamma Jet
@@ -747,37 +770,44 @@ Bool_t AliGenHijing::CheckTrigger()
 	    if (kf == 22 && ksp == 40) {
 		Float_t phi = part->Phi();
 		Float_t eta = part->Eta();
-		if  (eta < fEtaMaxJet && 
+		if  (eta < fEtaMaxJet &&
 		     eta > fEtaMinJet &&
-		     phi < fPhiMaxJet && 
+		     phi < fPhiMaxJet &&
 		     phi > fPhiMinJet) {
 		    triggered = 1;
 		    break;
 		} // check phi,eta within limits
-	    } // direct gamma ? 
+	    } // direct gamma ?
 	} // particle loop
     } // fTrigger == 2
     return triggered;
 }
 
-Int_t AliGenHijing::FreeSpectatorsn(Float_t b, Int_t nSpecn)
+Int_t AliGenHijing::FreeSpectatorsn(Float_t b)
 {
 // Select no. of spectator neutrons to put on the stack
-  Float_t corr = fFragmNeutrons->Eval(b);
-  
-  Float_t nSpecInStack = corr*nSpecn;
-  //printf("  FreeSpectatorsn: b %f corr. %f  nspecn_corr %f \n",b, corr, nSpecInStack);
- 
+  /*Float_t corr = fFragmNeutrons->Eval(b);
+  Float_t nSpecInStack = corr*nSpecn;*/ //old approach
+
+  float nave = fFragmNeutrons->Eval(b);
+  float sigma = fFragmNWidth->Eval(b);
+  float nSpecInStack = gRandom->Gaus(nave, 0.68*sigma*nave);
+  if(nave<0 || nSpecInStack<0) nSpecInStack=0;
+
   return (int) nSpecInStack;
 }
 
-Int_t AliGenHijing::FreeSpectatorsp(Float_t b, Int_t nSpecp)
+Int_t AliGenHijing::FreeSpectatorsp(Float_t b)
 {
 // Select no. of spectator protons to put on the stack
-  Double_t corr = fFragmProtons->Eval(b);
-  
-  Float_t nSpecInStack = corr*nSpecp;
-  //printf("  FreeSpectatorsp: corr. %f  nspecn_corr %f \n",corr, nSpecInStack);
- 
+  /*Double_t corr = fFragmProtons->Eval(b);
+  Float_t nSpecInStack = corr*nSpecp;*/ //old approach
+
+  Float_t pave = fFragmProtons->Eval(b);
+  Float_t sigma = fFragmPWidth->Eval(b);
+  //take into account roughly a 70% acceptance for spectator protons
+  float nSpecInStack = gRandom->Gaus(pave, 0.68*sigma*pave)/0.7;
+  if(pave<0 || nSpecInStack<0) nSpecInStack=0;
+
   return (int) nSpecInStack;
 }

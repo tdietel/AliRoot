@@ -1,5 +1,5 @@
+#include <TObjString.h>
 #include "AliNanoAODStorage.h"
-#include "AliNanoAODTrackMapping.h"
 #include "AliLog.h"
 
 ClassImp(AliNanoAODStorage)
@@ -53,10 +53,9 @@ AliNanoAODStorage& AliNanoAODStorage::operator=(const AliNanoAODStorage& sto)
 }
 
 Int_t AliNanoAODStorage::GetIntParameters(const TString varListHeader){
-  const TString stringVariables = "FiredTriggerClasses, BunchCrossNumber, OrbitNumber, PeriodNumber";//list of all possible string variables in AliNanoAODStorage
+  const TString stringVariables = "FiredTriggerClasses,BunchCrossNumber,OrbitNumber,PeriodNumber,NumberOfESDTracks,OfflineTrigger,RunNumber";//list of all possible string variables in AliNanoAODStorage
 
   TObjArray * vars = varListHeader.Tokenize(",");
-  Int_t size = vars->GetSize();
   TIter it(vars);
   TObjString *token  = 0;
   Int_t stringVars=0;

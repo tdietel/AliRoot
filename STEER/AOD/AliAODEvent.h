@@ -24,6 +24,7 @@
 #include "AliAODTrack.h"
 #include "AliAODVertex.h"
 #include "AliAODv0.h"
+#include "AliAODkink.h"
 #include "AliAODcascade.h"
 #include "AliAODTracklets.h"
 #include "AliAODJet.h"
@@ -47,19 +48,20 @@ class AliEventplane;
 
 class AliAODEvent : public AliVEvent {
 
- public :
+public:
   enum AODListIndex_t {kAODHeader,
 		       kAODTracks,
 		       kAODVertices,
 		       kAODv0,
+		       kAODkink,
 		       kAODcascade,
 		       kAODTracklets,
 		       kAODJets,
 		       kAODEmcalCells,
 		       kAODPhosCells,
 		       kAODCaloClusters,
-	           kAODEMCALTrigger,
-	           kAODPHOSTrigger,
+	               kAODEMCALTrigger,
+	               kAODPHOSTrigger,
 		       kAODFmdClusters,
 		       kAODPmdClusters,
                        kAODHMPIDrings,
@@ -68,7 +70,7 @@ class AliAODEvent : public AliVEvent {
 		       kAODVZERO,
 		       kAODZDC,
 		       kAODAD,
-		       kTOFHeader,                       
+		       kTOFHeader,
 		       kAODTrdTracks,
 		       kAODListN
   };
@@ -83,16 +85,16 @@ class AliAODEvent : public AliVEvent {
   void          AddObject(TObject *obj);
   void          RemoveObject(TObject *obj);
   TObject      *FindListObject(const char *objName) const;
-  TList        *GetList()                const { return fAODObjects; }
+  TList        *GetList() const { return fAODObjects; }
   void          SetConnected(Bool_t conn=kTRUE) {fConnected=conn;}
   Bool_t        GetConnected() const {return fConnected;}
   Bool_t        AreTracksConnected() const {return fTracksConnected;}
 
   // -- Header
-  AliVHeader    *GetHeader()              const { return fHeader; }
+  AliVHeader   *GetHeader() const { return fHeader; }
   void          AddHeader(const AliVHeader* hdx)
     {
-      delete fHeader; 
+      delete fHeader;
       if(dynamic_cast<const AliAODHeader*>(hdx)) {
 	fHeader = new AliAODHeader(*(const AliAODHeader*)hdx);
       } else if (dynamic_cast<const AliNanoAODHeader*>(hdx)) {
@@ -101,7 +103,7 @@ class AliAODEvent : public AliVEvent {
       else {
         AliError(Form("Unknown header type %s", hdx->ClassName()));
       }
-        (fAODObjects->FirstLink())->SetObject(fHeader);
+      fAODObjects->FirstLink()->SetObject(fHeader);
     }
 
   virtual  Bool_t InitMagneticField() const {return fHeader ? fHeader->InitMagneticField() : kFALSE;}
@@ -136,7 +138,7 @@ class AliAODEvent : public AliVEvent {
   Double_t GetSigma2DiamondX() const {return fHeader ? fHeader->GetSigma2DiamondX() : -999.;}
   Double_t GetSigma2DiamondY() const {return fHeader ? fHeader->GetSigma2DiamondY() : -999.;}
   Double_t GetSigma2DiamondZ() const {return fHeader ? fHeader->GetSigma2DiamondZ() : -999.;}
-  
+
   void      SetEventType(UInt_t eventType){fHeader->SetEventType(eventType);}
   void      SetTriggerMask(ULong64_t n) {fHeader->SetTriggerMask(n);}
   void      SetTriggerCluster(UChar_t n) {fHeader->SetTriggerCluster(n);}
@@ -152,6 +154,7 @@ class AliAODEvent : public AliVEvent {
   Double_t  GetZDCEMEnergy(Int_t i) const { return fHeader ? fHeader->GetZDCEMEnergy(i) : -999.; }
   Int_t     GetNumberOfESDTracks()  const { return fHeader ? fHeader->GetNumberOfESDTracks() : 0; }
   Int_t     GetNumberOfTPCTracks()  const { return fHeader ? fHeader->GetNumberOfTPCTracks() : 0; }
+  Int_t     GetNTPCTrackBeforeClean() const { return fHeader ? ((AliAODHeader*)fHeader)->GetNTPCTrackBeforeClean() : 0;}
   Int_t     GetNumberOfTPCClusters() const { return fHeader ? fHeader->GetNumberOfTPCClusters() : 0; }
   Int_t     GetNumberOfITSClusters(Int_t lr) const {return fHeader ? (int)fHeader->GetNumberOfITSClusters(lr) : 0;}
   void SetTOFHeader(const AliTOFHeader * tofEventTime);
@@ -178,7 +181,7 @@ class AliAODEvent : public AliVEvent {
   AliAODVertex *GetVertex(Int_t nVertex) const { return fVertices?(AliAODVertex*)fVertices->At(nVertex):0; }
   Int_t         AddVertex(const AliAODVertex* vtx)
   {new((*fVertices)[fVertices->GetEntriesFast()]) AliAODVertex(*vtx); return fVertices->GetEntriesFast()-1;}
-  
+
   // primary vertex
   using AliVEvent::GetPrimaryVertex;
   using AliVEvent::GetPrimaryVertexSPD;
@@ -187,8 +190,8 @@ class AliAODEvent : public AliVEvent {
   virtual AliAODVertex *GetPrimaryVertexSPD() const;
   virtual AliAODVertex *GetVertex() const { return GetPrimaryVertexSPD(); }
   virtual AliAODVertex *GetPrimaryVertexTPC() const;
-
-  // -- Pileup vertices 
+  virtual AliAODVertex *GetPrimaryVertexTracks() const {return GetVertex(0);}
+  // -- Pileup vertices
   Int_t         GetNumberOfPileupVerticesTracks()   const;
   Int_t         GetNumberOfPileupVerticesSPD()    const;
   virtual AliAODVertex *GetPileupVertexSPD(Int_t iV=0) const;
@@ -205,6 +208,15 @@ class AliAODEvent : public AliVEvent {
   Int_t         AddV0(const AliAODv0* v0)
   {new((*fV0s)[fV0s->GetEntriesFast()]) AliAODv0(*v0); return fV0s->GetEntriesFast()-1;}
 
+  // Kinks
+  TClonesArray *GetKinks()                 const { return fKinks; }
+  Int_t         GetNumberOfKinks()         const { return fKinks ? fKinks->GetEntriesFast() : 0; }
+  //using AliVEvent::GetKink;
+  AliAODkink     *GetAODkink(Int_t nkink)    const { return fKinks ? (AliAODkink*)fKinks->UncheckedAt(nkink) : 0; }
+  Int_t         AddKink(const AliAODkink* kink)
+  {new((*fKinks)[fKinks->GetEntriesFast()]) AliAODkink(*kink); return fKinks->GetEntriesFast()-1;}
+
+  
   // Cascades
   TClonesArray  *GetCascades(){
     FixCascades();
@@ -224,13 +236,13 @@ class AliAODEvent : public AliVEvent {
   AliAODCaloCluster *GetCaloCluster(Int_t nCluster) const { return fCaloClusters?(AliAODCaloCluster*)fCaloClusters->UncheckedAt(nCluster):0x0; }
   Int_t         AddCaloCluster(const AliAODCaloCluster* clus)
   {new((*fCaloClusters)[fCaloClusters->GetEntriesFast()]) AliAODCaloCluster(*clus); return fCaloClusters->GetEntriesFast()-1;}
-  AliAODCaloTrigger *GetCaloTrigger(TString calo) const 
-  { 	  
+  AliAODCaloTrigger *GetCaloTrigger(TString calo) const
+  {
      if (calo.Contains("EMCAL")) return fEMCALTrigger;
      else
-     return fPHOSTrigger; 
-  }	
-	
+     return fPHOSTrigger;
+  }
+
   Int_t GetEMCALClusters(TRefArray *clusters) const;
   Int_t GetPHOSClusters(TRefArray *clusters) const;
 
@@ -249,16 +261,16 @@ class AliAODEvent : public AliVEvent {
   Int_t         AddPmdCluster(const AliAODPmdCluster* clus)
   {new((*fPmdClusters)[fPmdClusters->GetEntriesFast()]) AliAODPmdCluster(*clus); return fPmdClusters->GetEntriesFast()-1;}
 
-  // -- HMPID objects 
-  TClonesArray *GetHMPIDrings()       const {return fHMPIDrings; } 
+  // -- HMPID objects
+  TClonesArray *GetHMPIDrings()       const {return fHMPIDrings; }
   Int_t         GetNHMPIDrings()      const;
   AliAODHMPIDrings *GetHMPIDring(Int_t nRings) const;
-  Int_t         AddHMPIDrings(const  AliAODHMPIDrings* ring) 
+  Int_t         AddHMPIDrings(const  AliAODHMPIDrings* ring)
   {new((*fHMPIDrings)[fHMPIDrings->GetEntriesFast()]) AliAODHMPIDrings(*ring); return fHMPIDrings->GetEntriesFast()-1;}
-  
+
   AliAODHMPIDrings *GetHMPIDringForTrackID(Int_t trackID) const;
-  
-  
+
+
   // -- Jet
   TClonesArray *GetJets()            const { return fJets; }
   Int_t         GetNJets()           const { return fJets?fJets->GetEntriesFast():0; }
@@ -267,8 +279,10 @@ class AliAODEvent : public AliVEvent {
     {new((*fJets)[fJets->GetEntriesFast()]) AliAODJet(*vtx); return fJets->GetEntriesFast()-1;}
 
   // -- Tracklets
-  AliAODTracklets *GetTracklets() const { return fTracklets; }  
-  AliAODTracklets *GetMultiplicity() const {return GetTracklets();}
+  using AliVEvent::GetMultiplicity;
+  AliAODTracklets *GetTracklets() const { return fTracklets; }
+  virtual AliAODTracklets *GetMultiplicity() const { return GetTracklets(); }
+
   // -- Calorimeter Cells
   AliAODCaloCells *GetEMCALCells() const { return fEmcalCells; }
   AliAODCaloCells *GetPHOSCells() const { return fPhosCells; }
@@ -282,7 +296,7 @@ class AliAODEvent : public AliVEvent {
   Int_t         GetNumberOfDimuons() const;
   AliAODDimuon *GetDimuon(Int_t nDimu) const;
   Int_t         AddDimuon(const AliAODDimuon* dimu);
-  
+
   // // -- TRD
   Int_t GetNumberOfTrdTracks() const { return fTrdTracks ? fTrdTracks->GetEntriesFast() : 0; }
   AliAODTrdTrack* GetTrdTrack(Int_t i) const {
@@ -295,42 +309,44 @@ class AliAODEvent : public AliVEvent {
   void    SetStdNames();
   void    GetStdContent();
   void    CreateStdFolders();
-  void    ResetStd(Int_t trkArrSize = 0, 
-		   Int_t vtxArrSize = 0, 
-		   Int_t v0ArrSize = 0, 
+  void    ResetStd(Int_t trkArrSize = 0,
+		   Int_t vtxArrSize = 0,
+		   Int_t v0ArrSize = 0,
+		   Int_t kinkArrSize = 0,
 		   Int_t cascadeArrSize = 0,
-		   Int_t jetSize = 0, 
-		   Int_t caloClusSize = 0, 
-		   Int_t fmdClusSize = 0, 
+		   Int_t jetSize = 0,
+		   Int_t caloClusSize = 0,
+		   Int_t fmdClusSize = 0,
 		   Int_t pmdClusSize = 0,
                    Int_t hmpidRingsSize = 0,
 		   Int_t dimuonArrsize =0,
 		   Int_t nTrdTracks = 0
 		   );
   void    ClearStd();
-  void    Reset(); 
+  void    Reset();
   void    ReadFromTree(TTree *tree, Option_t* opt = "");
   void    WriteToTree(TTree* tree) const {tree->Branch(fAODObjects);}
 
   void  Print(Option_t *option="") const;
   void  MakeEntriesReferencable();
   static void AssignIDtoCollection(const TCollection* col);
-  
+
     //Following needed only for mixed event
   virtual Int_t        EventIndex(Int_t)       const {return 0;}
   virtual Int_t        EventIndexForCaloCluster(Int_t) const {return 0;}
   virtual Int_t        EventIndexForPHOSCell(Int_t)    const {return 0;}
-  virtual Int_t        EventIndexForEMCALCell(Int_t)   const {return 0;} 
-  AliCentrality*       GetCentrality() {return fHeader->GetCentralityP();} 
+  virtual Int_t        EventIndexForEMCALCell(Int_t)   const {return 0;}
+  AliCentrality*       GetCentrality() {return fHeader->GetCentralityP();}
   AliEventplane*       GetEventplane() {return fHeader->GetEventplaneP();}
 
-  // TZERO 
+  // TZERO
   AliAODTZERO *GetTZEROData() const { return fAODTZERO; }
   Double32_t GetT0TOF(Int_t icase) const { return fAODTZERO?fAODTZERO->GetT0TOF(icase):999999;}
   const Double32_t * GetT0TOF() const { return fAODTZERO?fAODTZERO->GetT0TOF():0x0;}
- 
-  // VZERO 
-  AliAODVZERO *GetVZEROData() const { return fAODVZERO; }
+
+  // VZERO
+  using AliVEvent::GetVZEROData;
+  virtual AliAODVZERO *GetVZEROData() const { return fAODVZERO; }
   virtual const Float_t* GetVZEROEqFactors() const {return fHeader?fHeader->GetVZEROEqFactors():0x0;}
   virtual Float_t        GetVZEROEqMultiplicity(Int_t i) const;
   virtual void   SetVZEROEqFactors(Float_t factors[64]) const {
@@ -339,14 +355,14 @@ class AliAODEvent : public AliVEvent {
 
   //ZDC
   AliAODZDC   *GetZDCData() const { return fAODZDC; }
-  
+
   //AD
   AliAODAD   *GetADData() const { return fAODAD; }
 
   virtual AliVEvent::EDataLayoutType GetDataLayoutType() const;
   void FixCascades();
 
-  private :
+private:
 
   TList   *fAODObjects; ///< list of AODObjects
   TFolder *fAODFolder;  ///< folder structure of branches
@@ -357,6 +373,7 @@ class AliAODEvent : public AliVEvent {
   TClonesArray    *fTracks;       //!<! charged tracks
   TClonesArray    *fVertices;     //!<! vertices
   TClonesArray    *fV0s;          //!<! V0s
+  TClonesArray    *fKinks;       //!<!  kinks
   TClonesArray    *fCascades;     //!<! Cascades
   AliAODTracklets *fTracklets;    //!<! SPD tracklets
   TClonesArray    *fJets;         //!<! jets
@@ -378,10 +395,10 @@ class AliAODEvent : public AliVEvent {
                              //  It contains also TOF time resolution
                              //  and T0spread as written in OCDB
   TClonesArray    *fTrdTracks;    //!<! TRD AOD tracks (triggered)
-  
+
   static const char* fAODListName[kAODListN]; //!<!
 
-  ClassDef(AliAODEvent,94);
+  ClassDef(AliAODEvent,95);
 };
 
 #endif

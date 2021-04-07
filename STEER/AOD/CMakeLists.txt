@@ -21,8 +21,8 @@ add_definitions(-D_MODULE_="${MODULE}")
 include_directories(${AliRoot_SOURCE_DIR}/STEER/${MODULE})
 
 # Additional include directories - alphabetical order except ROOT
-include_directories(${ROOT_INCLUDE_DIR}
-                    ${AliRoot_SOURCE_DIR}/STEER/ESD
+include_directories(SYSTEM ${ROOT_INCLUDE_DIR})
+include_directories(${AliRoot_SOURCE_DIR}/STEER/ESD
                     ${AliRoot_SOURCE_DIR}/STEER/STEERBase
 		    ${AliRoot_SOURCE_DIR}/RAW/dateStream)
 
@@ -68,7 +68,7 @@ set(SRCS
     AliAODZDC.cxx
     AliNanoAODHeader.cxx
     AliNanoAODStorage.cxx
-    AliNanoAODTrackMapping.cxx
+    AliAODkink.cxx
    )
 
 # Sources from headers

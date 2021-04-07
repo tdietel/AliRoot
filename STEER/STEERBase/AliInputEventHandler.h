@@ -85,6 +85,7 @@ class AliInputEventHandler : public AliVEventHandler {
     virtual void CreatePIDResponse(Bool_t /*isMC*/=kFALSE) {;}
 
  protected:
+    Long64_t GetEntries();
     void SwitchOffBranches() const;
     void SwitchOnBranches()  const;
  private:

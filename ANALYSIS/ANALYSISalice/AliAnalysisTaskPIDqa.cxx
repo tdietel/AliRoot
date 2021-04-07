@@ -24,6 +24,7 @@
 #include <TF1.h>
 #include <TSpline.h>
 #include <TProfile2D.h>
+#include <TObjString.h>
 
 #include <AliAnalysisManager.h>
 #include <AliInputEventHandler.h>
@@ -1451,8 +1452,8 @@ void AliAnalysisTaskPIDqa::FillTRDHistogramsLikelihood(TList *sublistTRD, Int_t 
 
   nSigmaTPCele=fPIDResponse->NumberOfSigmas(AliPIDResponse::kTPC, track, AliPID::kElectron);
   const Int_t countSpecies=nSpecies;
-  Double_t likelihoods[countSpecies];
-
+  Double_t likelihoods[AliPID::kSPECIESCN]; //countSpecies];
+ 
   for(Int_t itl = 0; itl < ntracklets; itl++){
       // - Beginn: Likelihood & Nsigma vs. p before/after TRD PID
       for (Int_t ispecie=0; ispecie<numberSpecies; ++ispecie){

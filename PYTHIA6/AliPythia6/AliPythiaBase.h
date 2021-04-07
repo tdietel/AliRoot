@@ -8,11 +8,13 @@
 #include <TObject.h>
 #include "AliStructFuncType.h"
 #include "PythiaProcesses.h"
+#include "AliDecayer.h"
 
 class AliFastGlauber;
 class AliQuenchingWeights;
 class AliStack;
 class TClonesArray;
+
 
 class AliPythiaBase : public AliRndm 
 {
@@ -28,6 +30,7 @@ class AliPythiaBase : public AliRndm
     virtual void  ProcInit (Process_t /*process*/, Float_t /*energy*/, StrucFunc_t /*strucfunc*/, Int_t /* tune */) {;}
     virtual void  SetSeed(UInt_t seed);
     virtual void  GenerateEvent() {;}
+    virtual AliDecayer* Decayer() {return 0;}
     virtual void  GenerateMIEvent() {;}
     virtual Int_t GetNumberOfParticles() {return -1;};
     virtual void  SetNumberOfParticles(Int_t /*i*/){;}
@@ -36,6 +39,11 @@ class AliPythiaBase : public AliRndm
     virtual Int_t GetParticles(TClonesArray */*particles*/){return -1;}
     virtual void  PrintStatistics() {;}
     virtual void  EventListing() {;}
+    /**
+     * @brief Use weighted cross sections
+     * @param pow Weight power
+     */
+    virtual void SetWeightPower(Double_t pow) {;}
     // Treat protons as inside nuclei
     virtual void  SetNuclei(Int_t /*a1*/, Int_t /*a2*/) {;}
     // Print particle properties
@@ -63,6 +71,12 @@ class AliPythiaBase : public AliRndm
     virtual Float_t GetPtHard() {return -1.;}
     virtual Int_t   GetNMPI() {return -1;}
     virtual Int_t   GetNSuperpositions() { return 1; }
+
+    /**
+     * @brief Get the event weight from the underlying pythia process 
+     * @return Event weight 
+     */
+    virtual Float_t GetEventWeight() { return 1; }
     //
     //
     virtual void SetDecayTable() {;}

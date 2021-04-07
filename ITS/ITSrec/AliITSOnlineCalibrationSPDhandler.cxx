@@ -1689,6 +1689,21 @@ Bool_t AliITSOnlineCalibrationSPDhandler::IsPixelDead(UInt_t eq, UInt_t hs, UInt
   }
 }
 //____________________________________________________________________________________________
+Bool_t AliITSOnlineCalibrationSPDhandler::IsPixelSparseDead(UInt_t eq, UInt_t hs, UInt_t chip, UInt_t col, UInt_t row) const {
+  // is the pixel dead?
+  UInt_t gloChip = GetGloChip(eq,hs,chip);
+  if (gloChip>=1200 || col>=32 || row>=256) {
+    Error("AliITSOnlineCalibrationSPDhandler::IsPixelSparseDead", "eq,hs,chip,col,row nrs (%d,%d,%d,%d,%d) out of bounds.",eq,hs,chip,col,row);
+    return kFALSE;
+  }
+  UInt_t key = GetKey(eq,hs,chip,col,row);
+  if (IsDeadEq(eq) || IsDeadHS(eq,hs) || IsDeadChip(eq,hs,chip)) return kFALSE;
+  else {
+    if ( fSparseDeadPixelMap[gloChip]->Find(key) != NULL ) return kTRUE;
+    else return kFALSE;
+  }
+}
+//____________________________________________________________________________________________
 Bool_t AliITSOnlineCalibrationSPDhandler::IsPixelNoisy(UInt_t eq, UInt_t hs, UInt_t chip, UInt_t col, UInt_t row) const {
   // is the pixel noisy?
   UInt_t gloChip = GetGloChip(eq,hs,chip);
@@ -2362,7 +2377,7 @@ UInt_t AliITSOnlineCalibrationSPDhandler::GetNoisyRowAtC(UInt_t eq, UInt_t hs, U
 //____________________________________________________________________________________________
 const Char_t* AliITSOnlineCalibrationSPDhandler::GetDeadPixelAsTextC(UInt_t eq, UInt_t hs, UInt_t chip, UInt_t index) const {
   // get a string of dead pixel info
-  TString returnMess = "";
+  static TString returnMess = "";
   UInt_t gloChip = GetGloChip(eq,hs,chip);
   if (gloChip>=1200) {
     Error("AliITSOnlineCalibrationSPDhandler::GetDeadPixelAsTextC", "global chip nr (%d) out of bounds.",gloChip);
@@ -2386,7 +2401,7 @@ const Char_t* AliITSOnlineCalibrationSPDhandler::GetDeadPixelAsTextC(UInt_t eq, 
 //____________________________________________________________________________________________
 const Char_t* AliITSOnlineCalibrationSPDhandler::GetNoisyPixelAsTextC(UInt_t eq, UInt_t hs, UInt_t chip, UInt_t index) const {
   // get a string of noisy pixel info
-  TString returnMess = "";
+  static TString returnMess = "";
   UInt_t gloChip = GetGloChip(eq,hs,chip);
   if (gloChip>=1200) {
     Error("AliITSOnlineCalibrationSPDhandler::GetNoisyPixelAsTextC", "global chip nr (%d) out of bounds.",gloChip);

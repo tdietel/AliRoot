@@ -46,12 +46,13 @@ set(SRCS
     AliTRDonlineTrackingDataContainer.cxx
    )
 
-if(DEFINED ALITPCCOMMON_DIR)
-    add_definitions(-DHAVE_ALITPCCOMMON)
-    include_directories(${ALITPCCOMMON_DIR}/sources/TPCCAGPUTracking/SliceTracker
-                        ${ALITPCCOMMON_DIR}/sources/TPCCAGPUTracking/Merger
-                        ${ALITPCCOMMON_DIR}/sources/TPCCAGPUTracking/TRDTracking
-    )
+if(NOT ALIROOT_ONLINE_MODE)
+  add_definitions(-DHAVE_ALIGPU -DGPUCA_ALIROOT_LIB)
+  include_directories(${AliRoot_SOURCE_DIR}/GPU/GPUTracking/SliceTracker
+    ${AliRoot_SOURCE_DIR}/GPU/GPUTracking/TRDTracking
+    ${AliRoot_SOURCE_DIR}/GPU/GPUTracking/Merger
+    ${AliRoot_SOURCE_DIR}/GPU/Common
+  )
 endif()
 
 # Headers from sources

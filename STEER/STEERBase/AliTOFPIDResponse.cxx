@@ -297,6 +297,27 @@ Int_t AliTOFPIDResponse::GetStartTimeMask(Float_t mom) const {
   return GetT0binMask(ibin);
 
 }
+Double_t AliTOFPIDResponse::AdjustResolutionTuned(float sigmaResp, float timeor, float timetail, float sigmaSim, float sigmaOADB){ // adjust resolution to match OADB for MC
+// ciao
+  float resAddTail = 40;
+  float sigmacurr = sqrt(sigmaResp*sigmaResp + resAddTail*resAddTail - sigmaOADB*sigmaOADB + sigmaSim*sigmaSim);
+  float weight = 0;
+
+  float alpha2 = resAddTail/sigmacurr;
+  alpha2 *= alpha2;
+  float beta2 = sigmaResp/sigmacurr;
+  beta2 *= beta2;
+
+  if(sigmacurr > sigmaResp){
+    weight = (sqrt(alpha2*beta2 + beta2 - alpha2) - beta2) / (beta2 - alpha2);
+  }
+  else{ // degradate response
+    timeor += gRandom->Gaus(0, sqrt(sigmaResp*sigmaResp - sigmacurr*sigmacurr));
+  }
+
+  return (timeor + weight*timetail)/(1 + weight);
+
+}
 //_________________________________________________________________________
 Double_t AliTOFPIDResponse::GetTailRandomValue(Float_t pt,Float_t eta,Float_t time,Float_t addmism) // generate a random value to add a tail to TOF time (for MC analyses)
 {

@@ -43,6 +43,7 @@
 #include <TString.h>
 #include <TPaveText.h>
 #include <TLegend.h>
+#include <TLine.h>
 
 // --- Standard library ---
 

@@ -25,15 +25,18 @@
 
 #include "TArrayI.h"
 #include "TArrayF.h"
+#include "TVectorF.h"
 
 #include "AliLog.h"
 #include "AliPID.h"
 #include "AliTOFHeader.h"
+#include "AliESDUtils.h"
 #include "AliESDpid.h"
 #include "AliESDEvent.h"
 #include "AliESDtrack.h"
 #include "AliMCEvent.h"
 #include "AliTOFPIDParams.h"
+#include "AliPID.h"
 
 #include <AliDetectorPID.h>
 
@@ -41,6 +44,8 @@ ClassImp(AliESDpid)
 
 Bool_t AliESDpid::fgUseElectronExclusionBands = kFALSE;
 Int_t  AliESDpid::fgNSpeciesForTracking = AliPID::kSPECIESC;
+Int_t  AliESDpid::fgOnly3HeOrPi = 0;
+AliPID::EParticleType AliESDpid::fgParticleTypeNucleiTracking = AliPID::kHe3;
 
 Int_t AliESDpid::MakePID(AliESDEvent *event, Bool_t TPConly, Float_t /*timeZeroTOF*/) const {
   //
@@ -78,40 +83,49 @@ void AliESDpid::MakeTPCPID(AliESDtrack *track) const
   //
   //  TPC pid using bethe-bloch and gaussian response
   //
-  if ((track->GetStatus()&AliESDtrack::kTPCin )==0)
-    if ((track->GetStatus()&AliESDtrack::kTPCout)==0) return;
+  if ((track->GetStatus() & AliESDtrack::kTPCin) == 0 &&
+      (track->GetStatus() & AliESDtrack::kTPCout) == 0) {
+    return;
+  }
 
-    Double_t mom = track->GetP();
-    const AliExternalTrackParam *in=track->GetInnerParam();
-    if (in) mom = in->GetP();
+  Double_t mom = track->GetP();
+  const AliExternalTrackParam *in = track->GetInnerParam();
+  if (in) {
+    mom = in->GetP();
+  }
 
-    Double_t p[AliPID::kSPECIES];
-    Double_t dedx=track->GetTPCsignal();
-    Bool_t mismatch=kTRUE, heavy=kTRUE;
+  Double_t p[AliPID::kSPECIES];
+  Double_t dedx=track->GetTPCsignal();
+  Bool_t mismatch=kTRUE, heavy=kTRUE;
 
-    for (Int_t j=0; j<AliPID::kSPECIES; j++) {
-      AliPID::EParticleType type=AliPID::EParticleType(j);
-      Double_t bethe=fTPCResponse.GetExpectedSignal(mom,type);
-      Double_t sigma=fTPCResponse.GetExpectedSigma(mom,track->GetTPCsignalN(),type);
-      if (TMath::Abs(dedx-bethe) > fRange*sigma) {
-	p[j]=TMath::Exp(-0.5*fRange*fRange)/sigma;
-      } else {
-        p[j]=TMath::Exp(-0.5*(dedx-bethe)*(dedx-bethe)/(sigma*sigma))/sigma;
-        mismatch=kFALSE;
-      }
-
-      // Check for particles heavier than (AliPID::kSPECIES - 1)
-      if (dedx < (bethe + fRange*sigma)) heavy=kFALSE;
-
+  for (Int_t j=0; j<AliPID::kSPECIES; j++) {
+    AliPID::EParticleType type=AliPID::EParticleType(j);
+    Double_t bethe=fTPCResponse.GetExpectedSignal(mom,type);
+    Double_t sigma=fTPCResponse.GetExpectedSigma(mom,track->GetTPCsignalN(),type);
+    if (TMath::Abs(dedx-bethe) > fRange*sigma) {
+      p[j]=TMath::Exp(-0.5*fRange*fRange)/sigma;
+    } else {
+      p[j]=TMath::Exp(-0.5*(dedx-bethe)*(dedx-bethe)/(sigma*sigma))/sigma;
+      mismatch=kFALSE;
     }
 
-    if (mismatch)
-       for (Int_t j=0; j<AliPID::kSPECIES; j++) p[j]=1./AliPID::kSPECIES;
+    // Check for particles heavier than (AliPID::kSPECIES - 1)
+    if (dedx < (bethe + fRange*sigma)) {
+      heavy=kFALSE;
+    }
+  }
 
-    track->SetTPCpid(p);
+  if (mismatch) {
+    for (Int_t j=0; j<AliPID::kSPECIES; j++) {
+      p[j] = 1./AliPID::kSPECIES;
+    }
+  }
 
-    if (heavy) track->ResetStatus(AliESDtrack::kTPCpid);
+  track->SetTPCpid(p);
 
+  if (heavy) {
+    track->ResetStatus(AliESDtrack::kTPCpid);
+  }
 }
 //_________________________________________________________________________
 void AliESDpid::MakeITSPID(AliESDtrack *track) const
@@ -124,20 +138,25 @@ void AliESDpid::MakeITSPID(AliESDtrack *track) const
   //     Landau+gaus response functions
   //
 
-  if ((track->GetStatus()&AliESDtrack::kITSin)==0 &&
-      (track->GetStatus()&AliESDtrack::kITSout)==0) return;
+  if ((track->GetStatus() & AliESDtrack::kITSin) == 0 &&
+      (track->GetStatus() & AliESDtrack::kITSout) == 0) {
+    return;
+  }
 
   Double_t mom=track->GetP();
   if (fITSPIDmethod == kITSTruncMean) {
     Double_t dedx=track->GetITSsignal();
     Bool_t isSA=kTRUE;
     Double_t momITS=mom;
-    ULong64_t trStatus=track->GetStatus();
-    if(trStatus&AliESDtrack::kTPCin) isSA=kFALSE;
+    if (track->GetStatus() & AliESDtrack::kTPCin) {
+      isSA=kFALSE;
+    }
     UChar_t clumap=track->GetITSClusterMap();
     Int_t nPointsForPid=0;
-    for(Int_t i=2; i<6; i++){
-      if(clumap&(1<<i)) ++nPointsForPid;
+    for (Int_t i=2; i<6; i++) {
+      if (clumap&(1<<i)) {
+        ++nPointsForPid;
+      }
     }
 
     if(nPointsForPid<3) { // track not to be used for combined PID purposes
@@ -153,23 +172,29 @@ void AliESDpid::MakeITSPID(AliESDtrack *track) const
       Double_t bethe=fITSResponse.Bethe(momITS,mass);
       Double_t sigma=fITSResponse.GetResolution(bethe,nPointsForPid,isSA);
       if (TMath::Abs(dedx-bethe) > fRange*sigma) {
-	p[j]=TMath::Exp(-0.5*fRange*fRange)/sigma;
+        p[j]=TMath::Exp(-0.5*fRange*fRange)/sigma;
       } else {
         p[j]=TMath::Exp(-0.5*(dedx-bethe)*(dedx-bethe)/(sigma*sigma))/sigma;
         mismatch=kFALSE;
       }
 
       // Check for particles heavier than (AliPID::kSPECIES - 1)
-      if (dedx < (bethe + fRange*sigma)) heavy=kFALSE;
-
+      if (dedx < (bethe + fRange*sigma)) {
+        heavy=kFALSE;
+      }
     }
 
-    if (mismatch)
-       for (Int_t j=0; j<AliPID::kSPECIES; j++) p[j]=1./AliPID::kSPECIES;
+    if (mismatch) {
+      for (Int_t j=0; j<AliPID::kSPECIES; j++) {
+        p[j] = 1./AliPID::kSPECIES;
+      }
+    }
 
     track->SetITSpid(p);
 
-    if (heavy) track->ResetStatus(AliESDtrack::kITSpid);
+    if (heavy) {
+      track->ResetStatus(AliESDtrack::kITSpid);
+    }
   }
   else {  // Likelihood method
     Double_t condprobfun[AliPID::kSPECIES];
@@ -227,9 +252,10 @@ void AliESDpid::MakeTOFPID(AliESDtrack *track, Float_t /*timeZeroTOF*/) const
   for (Int_t j=0; j<AliPID::kSPECIES; j++) {
     Double_t sig = sigma[j];
     if (TMath::Abs(tof-time[j]) > (fRange+2)*sig) {
-	p[j] = TMath::Exp(-0.5*(fRange+2)*(fRange+2))/sig;
-    } else
+      p[j] = TMath::Exp(-0.5*(fRange+2)*(fRange+2))/sig;
+    } else {
       p[j] = TMath::Exp(-0.5*(tof-time[j])*(tof-time[j])/(sig*sig))/sig;
+    }
 
     // Check the mismatching
 
@@ -385,6 +411,22 @@ Float_t AliESDpid::GetNumberOfSigmasTOFold(const AliVParticle *track, AliPID::EP
 }
 
 //_________________________________________________________________________
+Float_t AliESDpid::GetExpectedSignalTOFold(const AliVParticle *track, AliPID::EParticleType type) const
+{
+  AliVTrack *vtrack=(AliVTrack*)track;
+  const Double_t expTime = fTOFResponse.GetStartTime(vtrack->P()) + fTOFResponse.GetExpectedSignal(vtrack,type);
+  return expTime;
+}
+
+//_________________________________________________________________________
+Float_t AliESDpid::GetExpectedSigmaTOFold(const AliVParticle *track, AliPID::EParticleType type) const
+{
+  AliVTrack *vtrack=(AliVTrack*)track;
+  const Double_t expTime = fTOFResponse.GetExpectedSignal(vtrack,type);
+  return fTOFResponse.GetExpectedSigma(vtrack->P(),expTime,AliPID::ParticleMassZ(type));
+}
+
+//_________________________________________________________________________
 void AliESDpid::SetPIDForTracking(AliESDtrack *esdtr) const
 {
   // assign mass for tracking
@@ -405,6 +447,11 @@ void AliESDpid::SetPIDForTracking(AliESDtrack *esdtr) const
     return;
   }
 
+  if (fgOnly3HeOrPi != 0) {
+    esdtr->SetPIDForTracking( esdtr->GetTPCsignal() < fgOnly3HeOrPi ? AliPID::kPion : fgParticleTypeNucleiTracking );
+    return;
+  }
+  
   // or with AliPIDCombined
   // pidProb.ComputeProbabilities(esdtr, this, p);
 
@@ -422,14 +469,14 @@ void AliESDpid::SetPIDForTracking(AliESDtrack *esdtr) const
   //
   if (pid>AliPID::kSPECIESC-1 || (min>=max)) pid = AliPID::kPion;
   //
-  if (pid==0 && fgUseElectronExclusionBands) { // dE/dx "crossing points" in the TPC 
+  if (pid==0 && fgUseElectronExclusionBands) { // dE/dx "crossing points" in the TPC
     Double_t p = esdtr->GetP();
     if ((p>0.38)&&(p<0.48)) {
       if (prob[0]<prob[3]*10.) pid = AliPID::kKaon;
     }
     else if ((p>0.75)&&(p<0.85)) {
       if (prob[0]<prob[4]*10.) pid = AliPID::kProton;
-    } 
+    }
   }
 
   esdtr->SetPIDForTracking( pid );
@@ -462,4 +509,47 @@ void AliESDpid::SetNSpeciesForTracking(Int_t n)
   // set max number of species to consider for tracking
   fgNSpeciesForTracking = n>0 ? n : AliPID::kSPECIESC;
   AliInfoClassF("First %d species will be considered for tracking PID",fgNSpeciesForTracking);
+}
+
+//_________________________________________________________________________
+void AliESDpid::SetOnly3HeOrPi(Int_t val, AliPID::EParticleType type)
+{
+  // set the threshold discriminating between 3He and pions (0 to switch off)
+  fgOnly3HeOrPi = val;
+  fgParticleTypeNucleiTracking = type;
+  AliInfoClassF("Set the dE/dx threshold discriminating between 3He and pions to %i (0 to switch off)",fgOnly3HeOrPi);
+}
+
+//_________________________________________________________________________
+void AliESDpid::SetEventPileupProperties(const AliVEvent* vevent)
+{
+  const AliESDEvent* event = (AliESDEvent*)vevent;
+
+  // ===| Extract event information |===========================================
+  //
+  // ---| Primary multiplicity |------------------------------------------------
+  const AliESDVertex *vertex = event->GetPrimaryVertexTracks();
+  const Int_t primMult = vertex->GetNContributors();
+
+  // ---| ITS cluster occupancy |-----------------------------------------------
+  const AliMultiplicity *multObj = event->GetMultiplicity();
+  TVectorF itsClustersPerLayer(6);
+  for (Int_t i=0;i<6;i++)  {
+    itsClustersPerLayer[i] = multObj->GetNumberOfITSClusters(i);
+  }
+
+  // ---| TPC pileup vertex info |----------------------------------------------
+  TVectorF tpcVertexInfo(10);
+  AliESDUtils::GetTPCPileupVertexInfo(event, tpcVertexInfo);
+
+  // ===| calculate derived variables |=========================================
+  const Double_t shiftM = 0.5 * (tpcVertexInfo[1] + tpcVertexInfo[0]) - 25.;
+  const Double_t multSSD = itsClustersPerLayer[4] + itsClustersPerLayer[5];
+  const Double_t multSDD = itsClustersPerLayer[2] + itsClustersPerLayer[3];
+  const Double_t pileUp1DITS = (multSSD + multSDD) / 2.38;
+  const Double_t nPileUpSumCorr = (tpcVertexInfo[3] + tpcVertexInfo[4]) - 0.05 * pileUp1DITS;
+  const Double_t nPileUpPrim = nPileUpSumCorr / (1 - TMath::Abs(shiftM / 210.));
+
+  // ===| set pileup event properties |=========================================
+  fTPCResponse.SetEventPileupProperties(shiftM,nPileUpPrim,primMult);
 }

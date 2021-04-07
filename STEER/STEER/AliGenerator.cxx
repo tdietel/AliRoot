@@ -91,7 +91,9 @@ AliGenerator::AliGenerator():
   fATarget(0),
   fZTarget(0),
   fProjectile(""),
-  fTarget("")    
+  fTarget(""),
+  fSetUserTrig(0),
+  fUserTrigger(0)
 {
   //
   // Default constructor
@@ -162,7 +164,9 @@ AliGenerator::AliGenerator(Int_t npart):
   fATarget(0),
   fZTarget(0),
   fProjectile(""),
-  fTarget("")    
+  fTarget(""),
+  fSetUserTrig(0),
+  fUserTrigger(0)
 {
   //
   // Standard constructor
@@ -172,7 +176,7 @@ AliGenerator::AliGenerator(Int_t npart):
 	AliMC * mc = gAlice->GetMCApp();
 	if (mc) mc->SetGenerator(this);
     }
-    
+
     SetThetaRange(); ResetBit(kThetaRange);
     SetPhiRange(); ResetBit(kPhiRange);
     SetMomentumRange(); ResetBit(kMomentumRange);
@@ -209,7 +213,7 @@ AliGenerator::~AliGenerator()
 
 //_______________________________________________________________________
 void AliGenerator::Init()
-{   
+{
   //
   // Dummy initialisation
   //
@@ -218,9 +222,9 @@ void AliGenerator::Init()
 //_______________________________________________________________________
 void AliGenerator::GenerateN(Int_t ntimes)
 {
-// 
+//
 //  Run generator n times
-//    Used by AliGenCocktail for adding extra signals in proportion to 
+//    Used by AliGenCocktail for adding extra signals in proportion to
 //    multiplicity/centrality
 //  By default generates one AliGenHeader for each call to Generate()
 //   Can be overloaded (e.g. AliGenBox and AliGenParam) to consolidate headers
@@ -350,18 +354,24 @@ void AliGenerator::VertexExternal()
     //
     // Obtain vertex from external source (vertex generator)
     //
-    TVector3 vertex = fVertexGenerator->GetVertex();
-    fVertex[0] = vertex.X();
-    fVertex[1] = vertex.Y();
-    fVertex[2] = vertex.Z();
-    fTime = 0.;
+    Bool_t isGood;
+    TVector3 vertex = fVertexGenerator->GetVertex(isGood);
+    if(isGood){
+      fVertex[0] = vertex.X();
+      fVertex[1] = vertex.Y();
+      fVertex[2] = vertex.Z();
+      fTime = fVertexGenerator->GetLastVertexTime();
+    }else{
+      AliInfo("No primary vertex position in AliVertexGenFile -> call VertexInternal");
+      VertexInternal();
+    }
 }
 
 //_______________________________________________________________________
 void AliGenerator::VertexInternal()
 {
-    // 
-    // Obtain calculated vertex 
+    //
+    // Obtain calculated vertex
     // Default is gaussian smearing
     Float_t random[6];
     Float_t dv[3];
@@ -382,7 +392,7 @@ void AliGenerator::VertexInternal()
 	fTime = fTimeOrigin + fOsigma[2]/TMath::Ccgs()*
 	  TMath::Cos(2*random[0]*TMath::Pi())*
 	  TMath::Sqrt(-2*TMath::Log(random[1]));
-	
+
     } else {
 	Rndm(random,3);
 	for (j=0; j < 3; j++)
@@ -400,11 +410,11 @@ void  AliGenerator::PushTrack(Int_t done, Int_t parent, Int_t pdg,
   //
   // Loads one track on the stack
   //
-    
+
   if (fStack)
     fStack->PushTrack(done, parent, pdg, pmom, vpos, polar, tof,
                      mech, ntr, weight, is);
-  else 
+  else
     gAlice->GetMCApp()->PushTrack(done, parent, pdg, pmom, vpos, polar, tof,
                      mech, ntr, weight, is);
 }
@@ -419,11 +429,11 @@ void  AliGenerator::PushTrack(Int_t done, Int_t parent, Int_t pdg,
   //
   // Loads one track on the stack
   //
-  
+
   if (fStack)
      fStack->PushTrack(done, parent, pdg, px, py, pz, e, vx, vy, vz, tof,
                       polx, poly, polz, mech, ntr, weight, is);
-  else 
+  else
      gAlice->GetMCApp()->PushTrack(done, parent, pdg, px, py, pz, e, vx, vy, vz, tof,
                         polx, poly, polz, mech, ntr, weight, is);
 }
@@ -437,9 +447,9 @@ void AliGenerator:: KeepTrack(Int_t itrack)
   //
   if (fStack)
      fStack->KeepTrack(itrack);
-  else 
+  else
      gAlice->GetMCApp()->KeepTrack(itrack);
-   
+
 }
 
 //_______________________________________________________________________
@@ -450,19 +460,40 @@ void AliGenerator:: SetHighWaterMark(Int_t nt)
   //
   if (fStack)
      fStack->SetHighWaterMark(nt);
-  else 
+  else
      gAlice->GetMCApp()->SetHighWaterMark(nt);
-   
+
 }
 void AliGenerator::FinishRun()
 {
     ;
 }
 
+///-------------------------------------------------------------------------
+Bool_t AliGenerator:: ApplyUserTrigger()
+{
+  // User Trigger
+  if(fSetUserTrig){
+    if(!fUserTrigger){
+      AliFatal("No external trigger defined!");
+      return kTRUE;
+    }
+    else{
+      if(!fUserTrigger(fStack)){
+	fStack->Clean();
+	return kFALSE;
+      }
+      else return kTRUE;
+    }
+  }
+  return kTRUE;
+}
+///-------------------------------------------------------------------------
+
 //_______________________________________________________________________
 void AliGenerator::SetSeed(UInt_t seed)
 {
-  // 
+  //
   // function to set the seed in the random number generator used by this generator
   //
   GetRandom()->SetSeed(seed);

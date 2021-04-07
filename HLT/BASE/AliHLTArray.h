@@ -385,7 +385,7 @@ class AliHLTArray : public AliHLTInternal::AliHLTArrayBase<T, Dim>
      */
     inline AliHLTArray operator-( int x ) const;
 
-#ifndef HLTCA_GPUCODE
+#if !defined(GPUCA_GPUCODE)
     template<typename Other> inline AliHLTArray<Other, Dim> ReinterpretCast() const {
       AliHLTArray<Other, Dim> r;
       r.fData = reinterpret_cast<Other *>( Parent::fData );
@@ -527,8 +527,7 @@ class AliHLTFixedArray : public AliHLTArray<typename AliHLTInternal::TypeForAlig
     void *operator new( size_t );
 
     // disable copy
-#ifdef HLTCA_GPUCODE
-#else
+#if !defined(GPUCA_GPUCODE)
     AliHLTFixedArray( const AliHLTFixedArray & );
     AliHLTFixedArray &operator=( const AliHLTFixedArray & );
 #endif
@@ -559,7 +558,9 @@ namespace AliHLTInternal
   inline AliHLTArray<T, 1> AliHLTArrayBase<T, 2>::operator[]( int x )
   {
     x *= fStride;
+#ifdef ENABLE_ARRAY_BOUNDS_CHECKING
     typedef AliHLTArray<T, 1> AT1;
+#endif
     BOUNDS_CHECK( x, AT1() );
     AliHLTArray<T, 1> a;
     a.fData = &fData[x];
@@ -572,7 +573,9 @@ namespace AliHLTInternal
   inline const AliHLTArray<T, 1> AliHLTArrayBase<T, 2>::operator[]( int x ) const
   {
     x *= fStride;
+#ifdef ENABLE_ARRAY_BOUNDS_CHECKING
     typedef AliHLTArray<T, 1> AT1;
+#endif
     BOUNDS_CHECK( x, AT1() );
     AliHLTArray<T, 1> a;
     a.fData = &fData[x];
@@ -597,7 +600,9 @@ namespace AliHLTInternal
   inline AliHLTArray<T, 2> AliHLTArrayBase<T, 3>::operator[]( int x )
   {
     x *= fStrideX;
+#ifdef ENABLE_ARRAY_BOUNDS_CHECKING
     typedef AliHLTArray<T, 2> AT2;
+#endif
     BOUNDS_CHECK( x, AT2() );
     AliHLTArray<T, 2> a;
     a.fData = &fData[x];
@@ -610,7 +615,9 @@ namespace AliHLTInternal
   inline const AliHLTArray<T, 2> AliHLTArrayBase<T, 3>::operator[]( int x ) const
   {
     x *= fStrideX;
+#ifdef ENABLE_ARRAY_BOUNDS_CHECKING
     typedef AliHLTArray<T, 2> AT2;
+#endif
     BOUNDS_CHECK( x, AT2() );
     AliHLTArray<T, 2> a;
     a.fData = &fData[x];

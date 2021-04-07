@@ -21,6 +21,7 @@
 
 class TClass;
 class TTree;
+class TChain;
 class TFile;
 class TFileCollection;
 class TStopwatch;
@@ -100,6 +101,7 @@ enum EAliAnalysisFlags {
    void                GetAnalysisTypeString(TString &type) const;                    
    Bool_t              GetAutoBranchLoading() const {return fAutoBranchHandling;} 
    Long64_t            GetCacheSize() const       {return fCacheSize;}
+   Long64_t            GetNMCevents() const       {return fNMCevents;}
    static const char  *GetCommonFileName()        {return fgCommonFileName.Data();}
    AliAnalysisDataContainer *
                        GetCommonInputContainer() const  {return fCommonInput;}
@@ -146,6 +148,7 @@ enum EAliAnalysisFlags {
    void                SetAutoBranchLoading(Bool_t b) { fAutoBranchHandling = b; }
    void                SetCurrentEntry(Long64_t entry)            {fCurrentEntry = entry;}
    void                SetCacheSize(Long64_t size)                {fCacheSize = size;}
+   void                SetNMCevents(Long64_t nevents)             {fNMCevents = nevents;}
    void                SetCollectSysInfoEach(Int_t nevents=0)     {fNSysInfo = nevents;}
    void                SetCollectThroughput(Bool_t flag)          {Changed(); TObject::SetBit(kCollectThroughput,flag);}
    static void         SetCommonFileName(const char *name)        {fgCommonFileName = name;}
@@ -222,13 +225,16 @@ enum EAliAnalysisFlags {
 
    void                 ApplyDebugOptions();
    void                 AddClassDebug(const char *className, Int_t debugLevel);
-   
+   static TChain*       CreateChain(const char* filelist = "filelist.txt", const char* cTreeNameArg = "auto", Int_t iNumFiles = -1, Int_t iStartWithFile = 1);
+
    // Security
    Bool_t               IsLocked() const {return fLocked;}
    void                 Lock();
    void                 UnLock();
    void                 Changed();
    void                 InitInputData(AliVEvent* esdEvent, AliVfriendEvent* esdFriend);
+
+   void                 BreakExecutionChain(bool flag = true) { fBreakExecutionChain = flag; }
 protected:
    void                 CreateReadCache();
    void                 ImportWrappers(TList *source);
@@ -276,6 +282,7 @@ private:
    Int_t                   fNcalls;              ///< Total number of calls (events) of ExecAnalysis
    Long64_t                fMaxEntries;          ///< Maximum number of entries
    Long64_t                fCacheSize;           ///< Cache size in bytes
+   Long64_t                fNMCevents;           ///< Maximum number of entries
    static Int_t            fPBUpdateFreq;        ///< Progress bar update freq.
    TString                 fStatisticsMsg;       ///< Statistics user message
    TString                 fRequestedBranches;   ///< Requested branch names
@@ -290,6 +297,8 @@ private:
    static TString          fgCommonFileName;     //!<! Common output file name (not streamed)
    static TString          fgMacroNames;         //!<! Loaded macro names
    static AliAnalysisManager *fgAnalysisManager; //!<! static pointer to object instance
-   ClassDef(AliAnalysisManager, 21)  // Analysis manager class
+
+   bool                    fBreakExecutionChain; // Break the chain of task execution (it can be triggered by one of the subtasks)
+   ClassDef(AliAnalysisManager, 23)  // Analysis manager class
 };   
 #endif

@@ -388,7 +388,7 @@ void AliEMCALReconstructor::ConvertDigits(AliRawReader* rawReader, TTree* digits
   
   for (int  i=0;i<fgTriggerData->GetEntriesFast();i++) 
   {
-    ((AliEMCALTriggerData*)fgTriggerData->At(i))->SetMode(1);  
+    ((AliEMCALTriggerData*)fgTriggerData->At(i))->SetMode(AliEMCALTriggerData::ETriggerDataMode_t::kRawData);  
   }
 
   if(fgDigitsArr) fgDigitsArr->Clear("C");
@@ -540,7 +540,7 @@ void AliEMCALReconstructor::FillESD(TTree* digitsTree, TTree* clustersTree,
       trgESD->SetL1V0(i,v0);        
 
       trgESD->SetMedian(i,((AliEMCALTriggerData*)fgTriggerData->At(i))->GetMedian());
-      if (!saveOnce[i] && ((AliEMCALTriggerData*)fgTriggerData->At(i))->GetL1DataDecoded()) 
+      if (!saveOnce[i] && ((AliEMCALTriggerData*)fgTriggerData->At(i))->IsL1DataDecoded()) 
       {
         int type[19] = {0};
         ((AliEMCALTriggerData*)fgTriggerData->At(i))->GetL1TriggerType(type);
@@ -610,23 +610,25 @@ void AliEMCALReconstructor::FillESD(TTree* digitsTree, TTree* clustersTree,
         
     emcCells.SetCell(idignew,dig->GetId(),energy, time,digLabel,0.,highGain);
 
+    mapDigitAndCellIndex[idignew] = idig; // needed to pack cell MC labels in cluster 
+        
+    // Trigger stuff
+    //
     const Int_t nSamples = 64;//rdig->GetNSamples();
     Int_t samples[nSamples]={0};
 
     if (dig->GetNALTROSamplesLG()) {
        dig->GetALTROSamplesLG(samples); fESDCalofriend->Add(dig->GetId(),1,nSamples,samples);
     }
-    
-    //Reset
-    for (int idig=0;idig<nSamples;idig++) samples[idig]=0;
+  
+    // Reset
+    for (int isamp=0;isamp<nSamples;isamp++) samples[isamp]=0;
 
     if (dig->GetNALTROSamplesHG()) {
        dig->GetALTROSamplesHG(samples); fESDCalofriend->Add(dig->GetId(),0,nSamples,samples);
     }
     
-    mapDigitAndCellIndex[idignew] = idig; // needed to pack cell MC labels in cluster 
-        
-    idignew++;
+    idignew++;     
   }
   
   emcCells.SetNumberOfCells(idignew);

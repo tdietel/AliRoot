@@ -79,9 +79,9 @@ Int_t AliTreeFormulaF::Compile(const char *expression) {
   //    variable: TTreeFormula
   // 3. GetFormatted string
   //
-  Int_t sLength = fquery.Length();     // original format string
-  Int_t iVar = 0;
-  Int_t varBegin = -1;
+  //Int_t sLength = fquery.Length();     // original format string
+  //Int_t iVar = 0;
+  //Int_t varBegin = -1;
   fFormulaArray = new TObjArray;
   fFormatArray = new TObjArray;
   fTextArray = new TObjArray;
@@ -108,6 +108,7 @@ Int_t AliTreeFormulaF::Compile(const char *expression) {
   }
   TString stext(fquery(lastI, fquery.Length() - lastI));
   fTextArray->AddAtAndExpand(new TObjString(stext.Data()), nVars);
+  return 0;
 }
 
 ///
@@ -115,6 +116,7 @@ Int_t AliTreeFormulaF::Compile(const char *expression) {
 /// \return
 char *AliTreeFormulaF::PrintValue(Int_t mode) const {
    PrintValue(mode, 0, "");
+   return NULL;
 }
 
 /// Overwrite TTreeFormula PrintValue
@@ -129,7 +131,6 @@ char *AliTreeFormulaF::PrintValue(Int_t mode) const {
 char *AliTreeFormulaF::PrintValue(Int_t mode, Int_t instance, const char *decform) const {
   std::stringstream stream;
   Int_t nVars = fFormulaArray->GetEntries();
-  const char *format=NULL;
   for (Int_t iVar = 0; iVar <= nVars; iVar++) {
     stream << fTextArray->At(iVar)->GetName();
     if (fDebug&2) cout<<"T"<<iVar<<"\t\t"<<fTextArray->At(iVar)->GetName()<<endl;
@@ -657,7 +658,7 @@ Int_t  AliTreePlayer::selectWhatWhereOrderBy(TTree * tree, TString what, TString
 
   // print header
   if (isHTML){
-    fprintf(default_fp,"<table class=\"display\" cellspacing=\"0\" width=\"100%\">\n"); // add metadata info
+    fprintf(default_fp,"%s", "<table class=\"display\" cellspacing=\"0\" width=\"100%\">\n"); // add metadata info
     fprintf(default_fp,"\t<thead class=\"header\">\n"); // add metadata info
     fprintf(default_fp,"\t<tr>\n"); // add metadata info
     for (Int_t iCol=0; iCol<nCols; iCol++){
@@ -687,7 +688,7 @@ Int_t  AliTreePlayer::selectWhatWhereOrderBy(TTree * tree, TString what, TString
     fprintf(default_fp,"\t</tfoot>\n"); // add metadata info
     fprintf(default_fp,"\t<tbody>\n"); // add metadata info
   }
-  if (isCSV){
+  if (isCSV && outputFormat.Contains("csvroot")){
     // add header info
     for (Int_t iCol=0; iCol<nCols; iCol++){
       fprintf(default_fp,"%s%s",columnNameList[iCol]->GetName(), outputFormatList[iCol]->GetName());
@@ -834,11 +835,13 @@ Int_t  AliTreePlayer::selectWhatWhereOrderBy(TTree * tree, TString what, TString
       fprintf(default_fp,"</tr>\n");
     }
     //
-    if (isCSV){
+    if (isCSV){   ///dummy
       for (Int_t icol=0; icol<nCols; icol++){  // formula loop
         Int_t nData=rFormulaList[icol]->GetNdata();
         if (nData<=1){
-          fprintf(default_fp,"%s\t",rFormulaList[icol]->PrintValue(0,0,printFormatList[icol]->GetName()));
+          TString qValue=rFormulaList[icol]->PrintValue(0,0,printFormatList[icol]->GetName());
+          qValue.ReplaceAll("\t","");
+          fprintf(default_fp,"%s\t",qValue.Data());
         }else{
           for (Int_t iData=0; iData<nData;iData++){  // array loo
             fprintf(default_fp,"%f",rFormulaList[icol]->EvalInstance(iData));
@@ -852,6 +855,29 @@ Int_t  AliTreePlayer::selectWhatWhereOrderBy(TTree * tree, TString what, TString
       }
       fprintf(default_fp,"\n");
     }
+    if (isCSV){   ///dummy
+      Int_t nDataMax=1;
+      for (Int_t icol=0; icol<nCols; icol++) {       // formula loop
+        Int_t nData = rFormulaList[icol]->GetNdata();
+        nDataMax=TMath::Max(nDataMax,nData);
+      }
+      for (Int_t iData=0; iData<nDataMax;iData++){  // array loop
+        for (Int_t icol=0; icol<nCols; icol++){  // formula loop
+          Int_t nData=rFormulaList[icol]->GetNdata();
+          if (nData<=1){
+            fprintf(default_fp,"%s\t",rFormulaList[icol]->PrintValue(0,0,printFormatList[icol]->GetName()));
+          }else{
+              fprintf(default_fp,"%f",rFormulaList[icol]->EvalInstance(iData));
+              fprintf(default_fp,"\t");
+
+          }
+        }
+        fprintf(default_fp,"\n");
+      }
+    }
+
+
+
   }
   if (isJSON) fprintf(default_fp,"}\t]\n}\n");
   if (isHTML){
@@ -1122,6 +1148,10 @@ TObjArray  * AliTreePlayer::MakeHistograms(TTree * tree, TString hisString, TStr
   //
 
   const Int_t kMaxDim=10;
+  if (tree== nullptr){
+    ::Error("AliTreePlayer::MakeHistograms","Tree=0");
+    return 0;
+  }
   Int_t entriesAll=tree->GetEntries();
   if (chunkSize<=0) chunkSize=entriesAll;
   if (lastEntry>entriesAll) lastEntry=entriesAll;
@@ -1158,6 +1188,7 @@ TObjArray  * AliTreePlayer::MakeHistograms(TTree * tree, TString hisString, TStr
       hisDescriptionArray->AddAtAndExpand(new TObjString(((hisDescriptionList->At(iHis)->GetName()))+(hisIndex+2)),iHis);
     }
     hisDescription.Remove(hisIndex);
+    hisDescription.ReplaceAll("::","____");
     TObjArray *hisDimArray=hisDescription.Tokenize(":");
     Int_t nDims=hisDimArray->GetEntries();
     if (nDims<=0){
@@ -1165,6 +1196,11 @@ TObjArray  * AliTreePlayer::MakeHistograms(TTree * tree, TString hisString, TStr
       ::Error("AliTreePlayer::MakeHistograms","Invalid description %s",hisDescription.Data());
       delete hisDimArray;
       break;
+    }else{
+      for (Int_t iDim=0; iDim<nDims;iDim++) {
+        TObjString *tFormula =  (TObjString*) hisDimArray->At(iDim);
+        tFormula->String().ReplaceAll("____","::");
+      }
     }
     TObjArray * varArray = new TObjArray(nDims);
     if (hisDimArray->At(nDims-1)->GetName()[0]=='#'){
@@ -1539,7 +1575,10 @@ TPad *  AliTreePlayer::DrawHistograms(TPad  * pad, TObjArray * hisArray, TString
 
 ///\brief Fill tree with information specified in varList of TTreeFormulas
 /// Used to cache CPU consuming formulas
-/// In case input tree is "flat" - not array output tree can be used as a friend ....
+/// To consider:
+///    1.) In case input tree is "flat" - not array output tree can be used as a friend ....
+///    2.) In case of not flat tree user should made appropiate tree->SetEstimate to allocate buffers otherwise only partial results available
+///
 /// \param tree         - TTree with input
 /// \param varList      - list of TTreeFormulas to export
 /// \param outFile      -  output file name
@@ -1547,9 +1586,10 @@ TPad *  AliTreePlayer::DrawHistograms(TPad  * pad, TObjArray * hisArray, TString
 /// \param selection    - tree selection
 /// \param firstEntry   - first entry to export
 /// \param nEntries     - number of nEntries to export
-void AliTreePlayer::MakeCacheTree(TTree * tree, TString varList, TString outFile, TString outTree, TCut selection, Int_t nEntries, Int_t firstEntry){
-  TTreeSRedirector *pcstream = new TTreeSRedirector(outFile,"recreate");
+void AliTreePlayer::MakeCacheTree(TTree * tree, TString varList, TString outFile, TString outTree, TCut selection, Int_t nEntries, Int_t firstEntry, const char *fileMode){
+  TTreeSRedirector *pcstream = new TTreeSRedirector(outFile,fileMode);
   if (tree->GetEstimate()<tree->GetEntries()) tree->SetEstimate(tree->GetEntries());
+  Int_t estimate=tree->GetEstimate();
   Int_t entries=0;
   if (firstEntry>=0 && nEntries>0) {
     entries = tree->Draw(varList.Data(),selection,"goffpara",nEntries,firstEntry);
@@ -1560,6 +1600,7 @@ void AliTreePlayer::MakeCacheTree(TTree * tree, TString varList, TString outFile
   const Int_t nVars=varName->GetEntries();
   Double_t vars[nVars];
   TTree *treeOut=NULL;
+  if (entries>estimate) entries=estimate;
   for (Int_t iPoint=0; iPoint <entries; iPoint++){
     for (Int_t iVar=0; iVar<nVars; iVar++){
       vars[iVar]=tree->GetVal(iVar)[iPoint];
@@ -1575,6 +1616,61 @@ void AliTreePlayer::MakeCacheTree(TTree * tree, TString varList, TString outFile
   delete pcstream;
 }
 
+///\brief Fill tree with information specified in varList of TTreeFormulas
+/// Used to cache CPU consuming formulas
+/// To consider:
+///    1.) In case input tree is "flat" - not array output tree can be used as a friend ....
+///    2.) In case of not flat tree user should made appropiate tree->SetEstimate to allocate buffers otherwise only partial results available
+///
+/// \param tree         - TTree with input
+/// \param varList      - list of TTreeFormulas to export
+/// \param outFile      -  output file name
+/// \param outTree      - output tree name
+/// \param selection    - tree selection
+/// \param firstEntry   - first entry to export
+/// \param chunkSize    - chunkSize expressed in number of Entries
+/// \param nEntries     - number of nEntries to export
+void AliTreePlayer::MakeCacheTreeChunk(TTree * tree, TString varList, TString outFile, TString outTree, TCut selection,   Int_t nEntries, Int_t firstEntry, Int_t chunkSize, const char *fileMode){
+  //
+  //
+  ::Info("AliTreePlayer::MakeCacheTreeChunk","BEGIN");
+  TTreeSRedirector *pcstream = new TTreeSRedirector(outFile,fileMode);
+  Int_t entriesAll = tree->GetEntries();
+  if (nEntries<0) nEntries=entriesAll-firstEntry;
+  if (chunkSize<0) chunkSize=nEntries;
+  TObjArray *varName = varList.Tokenize(":");
+  const Int_t nVars = varName->GetEntries();
+  Double_t vars[nVars];
+  TTree *treeOut = NULL;
+  Int_t estimate = tree->GetEstimate();
+  //
+  for (Int_t iEntry=firstEntry; iEntry<nEntries; iEntry+=chunkSize) {
+    ::Info("Processing chunk","%d",iEntry);
+    if (estimate < chunkSize) tree->SetEstimate(chunkSize);
+    Int_t entries = tree->Draw(varList.Data(), selection, "goffpara", chunkSize, iEntry);
+    if (entries<=0) break;
+    if (entries > estimate) {
+      estimate=entries;
+      tree->SetEstimate(estimate);
+      entries = tree->Draw(varList.Data(), selection, "goffpara", chunkSize, iEntry);
+    }
+    for (Int_t iPoint = 0; iPoint < entries; iPoint++) {
+      for (Int_t iVar = 0; iVar < nVars; iVar++) {
+        vars[iVar] = tree->GetVal(iVar)[iPoint];
+        if (iPoint == 0) (*pcstream) << outTree.Data() << TString::Format("%s=", varName->At(iVar)->GetName()).Data() << vars[iVar];
+      }
+      if (iPoint == 0) {
+        (*pcstream) << outTree.Data() << "\n";
+        treeOut = ((*pcstream) << outTree.Data()).GetTree();
+      } else {
+        treeOut->Fill();
+      }
+    }
+  }
+  delete pcstream;
+  ::Info("AliTreePlayer::MakeCacheTreeChunk","END");
+}
+
 /// \brief LoadTrees and and append friend trees
 /// \param inputDataList          - command returning input data list - line with #tag:value for the metadata definition
 /// \param chRegExp               - regular expression  - trees to include
@@ -1583,7 +1679,7 @@ void AliTreePlayer::MakeCacheTree(TTree * tree, TString varList, TString outFile
 /// \param axisAlias              - axis names
 /// \param axisTitle              - axis titles
 /// \return                       - resulting tree
-TTree* AliTreePlayer::LoadTrees(const char *inputDataList, const char *chRegExp, const char *chNotReg, TString inputFileSelection, TString axisAlias, TString axisTitle) {
+TTree* AliTreePlayer::LoadTrees(const char *inputDataList, const char *chRegExp, const char *chNotReg, TString inputFileSelection, TString axisAlias, TString axisTitle, Int_t verbose) {
   //
   TPRegexp regExp(chRegExp);
   TPRegexp notReg(chNotReg);
@@ -1624,7 +1720,9 @@ TTree* AliTreePlayer::LoadTrees(const char *inputDataList, const char *chRegExp,
     if (!isSelected) continue;
     ::Info("LoadTrees","Load file\t%s", fileName.Data());
     TString description = "";
-    TFile *finput = TFile::Open(fileName.Data());
+    TString option="";
+    if (fileName.Contains("http")) option="cacheread";
+    TFile *finput = TFile::Open(fileName.Data(),option.Data());
     if (finput == NULL) {
       ::Error("MakeResidualDistortionReport", "Invalid file name %s", fileName.Data());
       continue;
@@ -1637,7 +1735,7 @@ TTree* AliTreePlayer::LoadTrees(const char *inputDataList, const char *chRegExp,
       if (notReg.Match(keys->At(iKey)->GetName()) != 0) continue;     // is rejected
       TTree *tree = (TTree *) finput->Get(keys->At(iKey)->GetName()); // better to use dynamic cast
       if (treeBase == NULL) {
-        TFile *finput2 = TFile::Open(fileName.Data());
+        TFile *finput2 = TFile::Open(fileName.Data(),option.Data());
         treeBase = (TTree *) finput2->Get(keys->At(iKey)->GetName());
       }
       TString fileTitle=tagValue["Title"];
@@ -1649,7 +1747,7 @@ TTree* AliTreePlayer::LoadTrees(const char *inputDataList, const char *chRegExp,
       Int_t entriesF = tree->GetEntries();
       Int_t entriesB = treeBase->GetEntries();
       if (entriesB == entriesF) {
-        ::Info("InitMapTree", "%s\t%s.%s:\t%d\t%d", treeBase->GetName(), fileName.Data(), keys->At(iKey)->GetName(), entriesB, entriesF);
+        if (verbose>0) ::Info("InitMapTree", "%s\t%s.%s:\t%d\t%d", treeBase->GetName(), fileName.Data(), keys->At(iKey)->GetName(), entriesB, entriesF);
       } else {
         ::Error("InitMapTree", "%s\t%s.%s:\t%d\t%d", treeBase->GetName(), fileName.Data(), keys->At(iKey)->GetName(), entriesB, entriesF);
       }
@@ -1665,3 +1763,108 @@ TTree* AliTreePlayer::LoadTrees(const char *inputDataList, const char *chRegExp,
   return treeBase;
 }
 
+
+
+/// AddMetadata to the input tree - see https://alice.its.cern.ch/jira/browse/ATO-290
+/// \param tree         - input tree
+/// \param varTagName   - tag to register
+/// \param varTagValue  - value
+/// \return             - return has list
+/// Currently supported metadata
+///* Drawing  :
+///  * <varName>.AxisTitle
+///  *<varName>.Legend
+///  * <varname>.Color
+///  * <varname>.MarkerStyle
+///* This metadata than can be used by the TStatToolkit
+///  * TStatToolkit::MakeGraphSparse
+///  * TStatToolkit::MakeGraphErrors
+///
+THashList*  AliTreePlayer::AddMetadata(TTree* tree, const char *varTagName,const char *varTagValue){
+  if (!tree) return NULL;
+  THashList * metaData = (THashList*) tree->GetUserInfo()->FindObject("metaTable");
+  if (metaData == NULL){
+    metaData=new THashList;
+    metaData->SetName("metaTable");
+    tree->GetUserInfo()->AddLast(metaData);
+  }
+  if (varTagName!=NULL && varTagValue!=NULL){
+    TNamed * named = TStatToolkit::GetMetadata(tree, varTagName,NULL,kTRUE);
+    if (named==NULL){
+      metaData->AddLast(new TNamed(varTagName,varTagValue));
+    }else{
+      named->SetTitle(varTagValue);
+    }
+  }
+  return metaData;
+}
+
+/// Get metadata description
+/// In case metadata contains friend part - friend path os returned as prefix
+/// Metadata are supposed to be added into tree using TStatToolkit::AddMetadata() function
+/// \param tree          - input tree
+/// \param varTagName    - tag name
+/// \param prefix        - friend prefix in case metadata are in friend tree
+/// \param fullMatch     - request full match in varTagName (to enable different metadata for tree and friend tree)
+/// \return              - metadata description
+/// TODO: too many string operations - to be speed up using char array arithmetic
+TNamed* AliTreePlayer::GetMetadata(TTree* tree, const char *varTagName, TString * prefix,Bool_t fullMatch){
+  //
+
+  if (!tree) return 0;
+  TTree * treeMeta=tree;
+
+  THashList * metaData = (THashList*) treeMeta->GetUserInfo()->FindObject("metaTable");
+  if (metaData == NULL){
+    metaData=new THashList;
+    metaData->SetName("metaTable");
+    tree->GetUserInfo()->AddLast(metaData);
+    return 0;
+  }
+  TNamed * named = (TNamed*)metaData->FindObject(varTagName);
+  if (named || fullMatch) return named;
+
+  TString metaName(varTagName);
+  Int_t nDots= metaName.CountChar('.');
+  if (prefix!=NULL) *prefix="";
+  if (nDots>1){ //check if friend name expansion needed
+    while (nDots>1){
+      TList *fList= treeMeta->GetListOfFriends();
+      if (fList!=NULL){
+        Int_t nFriends= fList->GetEntries();
+        for (Int_t kf=0; kf<nFriends; kf++){
+          TPRegexp regFriend(TString::Format("^%s.",fList->At(kf)->GetName()).Data());
+          if (metaName.Contains(regFriend)){
+            treeMeta=treeMeta->GetFriend(fList->At(kf)->GetName());
+            regFriend.Substitute(metaName,"");
+            if (prefix!=NULL){
+              (*prefix)+=fList->At(kf)->GetName();
+              // (*prefix)+=""; /// FIX use prefix as it is
+            }
+          }
+        }
+      }
+      if (nDots == metaName.CountChar('.')) break;
+      nDots=metaName.CountChar('.');
+    }
+  }
+
+  named = (TNamed*)metaData->FindObject(metaName.Data());
+  return named;
+
+}
+/// change to next pad in canvas - used in TTree::Draw()
+/// Example:
+///   draw histogram fulfilling criteria
+///   tree->Draw("histCM.Draw(\"colz\"):histCM.GetXaxis()->SetRangeUser(130,170)","!T0_isOK&&abs(peakPosition-150)<20&&AliTreePlayer::nextPad()","goffpara",100,0);
+Int_t AliTreePlayer::nextPad(){
+  /// used for Tree draw queries
+  static int counter=0;
+  if (!gPad) return kFALSE;
+  gPad->Update();
+  counter++;
+  gPad->GetMother()->cd(counter);
+  if (gPad->GetNumber()<counter) counter=0;
+  gPad->Update();
+  return counter;
+}

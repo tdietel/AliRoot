@@ -51,6 +51,7 @@ fTunedOnDataMask(0),
 fRecoPassTuned(0),
 fUseTPCEtaCorrection(kTRUE),
 fUseTPCMultiplicityCorrection(kTRUE),
+fUseTPCPileupCorrection(kTRUE),
 fUseTRDEtaCorrection(kTRUE),
 fUseTRDClusterCorrection(kTRUE),
 fUseTRDCentralityCorrection(kTRUE),
@@ -78,8 +79,10 @@ fRecoPass(0),
 fIsTunedOnData(kFALSE),
 fTunedOnDataMask(0),
 fRecoPassTuned(0),
+fResetTuneOnDataTOF(kFALSE),
 fUseTPCEtaCorrection(kTRUE),
 fUseTPCMultiplicityCorrection(kTRUE),
+fUseTPCPileupCorrection(kTRUE),
 fUseTRDEtaCorrection(kTRUE),
 fUseTRDClusterCorrection(kTRUE),
 fUseTRDCentralityCorrection(kTRUE),
@@ -170,12 +173,16 @@ void AliAnalysisTaskPIDResponse::UserExec(Option_t */*option*/)
 
   if (fRun!=fOldRun){
     SetRecoInfo();
-    if(fIsTunedOnData) fPIDResponse->SetTunedOnData(kTRUE,fRecoPassTuned, fRecoPassNameTuned);
+    if(fIsTunedOnData) {
+      fPIDResponse->SetTunedOnData(kTRUE,fRecoPassTuned, fRecoPassNameTuned);
+      if(fResetTuneOnDataTOF) fPIDResponse->ResetTuneOnDataTOF();
+    }
 
     fOldRun=fRun;
 
     fPIDResponse->SetUseTPCEtaCorrection(fUseTPCEtaCorrection);
     fPIDResponse->SetUseTPCMultiplicityCorrection(fUseTPCMultiplicityCorrection);
+    fPIDResponse->SetUseTPCPileupCorrection(fUseTPCPileupCorrection);
 
     fPIDResponse->SetUseTRDEtaCorrection(fUseTRDEtaCorrection);
     fPIDResponse->SetUseTRDClusterCorrection(fUseTRDClusterCorrection);
@@ -183,6 +190,7 @@ void AliAnalysisTaskPIDResponse::UserExec(Option_t */*option*/)
   }
 
   fPIDResponse->InitialiseEvent(event,fRecoPass, fRecoPassName);
+    
   fPIDResponse->SetCurrentMCEvent(MCEvent());
   AliESDpid *pidresp = dynamic_cast<AliESDpid*>(fPIDResponse);
   if(pidresp && AliAnalysisManager::GetAnalysisManager()->GetMCtruthEventHandler()){

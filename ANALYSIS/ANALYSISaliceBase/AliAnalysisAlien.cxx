@@ -42,6 +42,30 @@
 #include "AliVEventHandler.h"
 #include "AliAnalysisDataContainer.h"
 #include "AliMultiInputEventHandler.h"
+#include "TAliceCollection.h"
+// This is to make sure we create the correct TGridCollection
+// when we are not connected to the grid and gGrid is not there
+#if defined __has_include
+#    if __has_include("TJAlienCollection.h")
+#       include "TJAlienCollection.h"
+TGridCollection *createGridCollection(char const*basedir) {
+  return gGrid ? gGrid->OpenCollection(basedir) : (TGridCollection*)gROOT->ProcessLine(Form("TJAlienCollection::Open(\"%s\");", basedir));
+}
+#       define ConcreteAlienCollection TJAlienCollection
+#    elif __has_include("TAlienCollection.h")
+#       include "TAlienCollection.h"
+TGridCollection *createGridCollection(char const*basedir) {
+  return gGrid ? gGrid->OpenCollection(basedir) : (TGridCollection*)gROOT->ProcessLine(Form("TAlienCollection::Open(\"%s\");", basedir));
+}
+#    endif
+#else
+#include "TJAlienCollection.h"
+TGridCollection *createGridCollection(char const*basedir) {
+  return gGrid ? gGrid->OpenCollection(basedir) : (TGridCollection*)gROOT->ProcessLine(Form("TJAlienCollection::Open(\"%s\");", basedir));
+}
+#endif
+
+#include "TAliceJobStatus.h"
 
 using std::ofstream;
 using std::ifstream;
@@ -311,8 +335,8 @@ AliAnalysisAlien::AliAnalysisAlien(const AliAnalysisAlien& other)
                   fTreeName(other.fTreeName)
 {
 // Copy ctor.
-   fGridJDL = (TGridJDL*)gROOT->ProcessLine("new TAlienJDL()");
-   fMergingJDL = (TGridJDL*)gROOT->ProcessLine("new TAlienJDL()");
+   fGridJDL = NULL;
+   fMergingJDL = NULL;
    fRunRange[0] = other.fRunRange[0];
    fRunRange[1] = other.fRunRange[1];
    if (other.fInputFiles) {
@@ -359,8 +383,8 @@ AliAnalysisAlien &AliAnalysisAlien::operator=(const AliAnalysisAlien& other)
 // Assignment.
    if (this != &other) {
       AliAnalysisGrid::operator=(other);
-      fGridJDL = (TGridJDL*)gROOT->ProcessLine("new TAlienJDL()");
-      fMergingJDL = (TGridJDL*)gROOT->ProcessLine("new TAlienJDL()");
+      fGridJDL                 = NULL;
+      fMergingJDL              = NULL;
       fPrice                   = other.fPrice;
       fTTL                     = other.fTTL;
       fSplitMaxInputFileNumber = other.fSplitMaxInputFileNumber;
@@ -1139,7 +1163,7 @@ Int_t AliAnalysisAlien::CopyLocalDataset(const char *griddir, const char *patter
       Error("CopyLocalDataset", "Data directory %s not existing.", griddir);
       return 0;
    }
-   TString command = Form("find -z -l %d %s %s", nfiles, griddir, pattern);
+   TString command = Form("find -l %d %s %s", nfiles, griddir, pattern);
    printf("Running command: %s\n", command.Data());
    TGridResult *res = gGrid->Command(command);
    Int_t nfound = res->GetEntries();
@@ -1232,7 +1256,7 @@ Bool_t AliAnalysisAlien::CreateDataset(const char *pattern)
    delimiter.Strip();
    if (delimiter.Contains(" ")) delimiter = "";
    else delimiter = " ";
-   TString options = "-x collection ";
+   TString options = " ";
    if (TestBit(AliAnalysisGrid::kTest)) options += Form("-l %d ", fNtestFiles);
    else options += Form("-l %d ", gMaxEntries);  // Protection for the find command
    TString conditions = "";
@@ -1243,7 +1267,7 @@ Bool_t AliAnalysisAlien::CreateDataset(const char *pattern)
    TString path;
    Int_t nruns = 0;
    TString schunk, schunk2;
-   TGridCollection *cbase=0, *cadd=0;
+   TAliceCollection *cbase=0, *cadd=0;
    if (!fRunNumbers.Length() && !fRunRange[0]) {
       if (fInputFiles && fInputFiles->GetEntries()) return kTRUE;
       // Make a single data collection from data directory.
@@ -1260,7 +1284,7 @@ Bool_t AliAnalysisAlien::CreateDataset(const char *pattern)
          ncount = 0;
          stage++;
          if (gSystem->AccessPathName(file) || TestBit(AliAnalysisGrid::kTest) || fOverwriteMode) {
-            command = "alien_find ";
+            command = "find ";
             command += Form("%s -o %d ",options.Data(), nstart);
             command += path;
             command += delimiter;
@@ -1271,7 +1295,10 @@ Bool_t AliAnalysisAlien::CreateDataset(const char *pattern)
             //if (res) delete res;
             // Write standard output to file
 	    // Write standard error to null device
-            gSystem->Exec(Form("%s > __tmp%d__%s 2>/dev/null", command.Data(), stage, file.Data()));
+            //gSystem->Exec(Form("%s > __tmp%d__%s 2>/dev/null", command.Data(), stage, file.Data()));
+            TGridCollection *tmp = gGrid->OpenCollectionQuery(gGrid->Command(command), kTRUE);
+            tmp->ExportXML(Form("file://__tmp%d__%s", stage, file.Data()), kFALSE, kFALSE, command.Data());
+            delete tmp;
             //gROOT->ProcessLine(Form("gGrid->Stdout(); > __tmp%d__%s", stage, file.Data()));
             Bool_t hasGrep = (gSystem->Exec("grep --version 2>/dev/null > /dev/null")==0)?kTRUE:kFALSE;
             Bool_t nullFile = kFALSE;
@@ -1295,24 +1322,24 @@ Bool_t AliAnalysisAlien::CreateDataset(const char *pattern)
          }
          if (ncount == gMaxEntries) {
             Info("CreateDataset", "Dataset %s has more than 15K entries. Trying to merge...", file.Data());
-            cadd = (TGridCollection*)gROOT->ProcessLine(Form("new TAlienCollection(\"__tmp%d__%s\", 1000000);",stage,file.Data()));
+            cadd = dynamic_cast<TAliceCollection*>(gGrid->OpenCollection(Form("__tmp%d__%s", stage, file.Data()), 1000000));
             if (!cbase) cbase = cadd;
             else {
 	      // cholm - Avoid using very slow TAlienCollection 
 	      // cbase->Add(cadd);
 	      // cholm - Use AddFast (via interpreter)
-	      gROOT->ProcessLine(Form("((TAlienCollection*)%p)->AddFast((TGridCollection*)%p)",cbase,cadd));
+               cbase->AddFast(cadd);
                delete cadd;
             }   
             nstart += ncount;
          } else {
             if (cbase) {
-               cadd = (TGridCollection*)gROOT->ProcessLine(Form("new TAlienCollection(\"__tmp%d__%s\", 1000000);",stage,file.Data()));
+               cadd = dynamic_cast<TAliceCollection*>(gGrid->OpenCollection(Form("__tmp%d__%s", stage, file.Data()), 1000000));
                printf("... please wait - TAlienCollection::Add() scales badly...\n");
 	      // cholm - Avoid using very slow TAlienCollection 
 	      // cbase->Add(cadd);
 	      // cholm - Use AddFast (via interpreter)
-	      gROOT->ProcessLine(Form("((TAlienCollection*)%p)->AddFast((TGridCollection*)%p)",cbase,cadd));
+               cbase->AddFast(cadd);
                delete cadd;
                cbase->ExportXML(Form("file://%s", file.Data()),kFALSE,kFALSE, file, "Merged entries for a run");
                delete cbase; cbase = 0;               
@@ -1358,7 +1385,7 @@ Bool_t AliAnalysisAlien::CreateDataset(const char *pattern)
             ncount = 0;
             stage++;
             if (gSystem->AccessPathName(file) || TestBit(AliAnalysisGrid::kTest) || fOverwriteMode) {
-               command = "alien_find ";
+               command = "find ";
                command +=  Form("%s -o %d ",options.Data(), nstart);
                command += path;
                command += delimiter;
@@ -1368,7 +1395,10 @@ Bool_t AliAnalysisAlien::CreateDataset(const char *pattern)
                //if (res) delete res;
                // Write standard output to file
                //gROOT->ProcessLine(Form("gGrid->Stdout(); > __tmp%d__%s", stage,file.Data()));
-               gSystem->Exec(Form("%s > __tmp%d__%s 2>/dev/null", command.Data(), stage, file.Data()));
+               //gSystem->Exec(Form("%s > __tmp%d__%s 2>/dev/null", command.Data(), stage, file.Data()));
+               TGridCollection *tmp = gGrid->OpenCollectionQuery(gGrid->Command(command), kTRUE);
+               tmp->ExportXML(Form("file://__tmp%d__%s", stage, file.Data()), kFALSE, kFALSE, command.Data());
+               delete tmp;
                Bool_t hasGrep = (gSystem->Exec("grep --version 2>/dev/null > /dev/null")==0)?kTRUE:kFALSE;
                Bool_t nullFile = kFALSE;
                if (!hasGrep) {
@@ -1398,25 +1428,25 @@ Bool_t AliAnalysisAlien::CreateDataset(const char *pattern)
                           file.Data(),gMaxEntries);
                   return kFALSE;
                }           
-               cadd = (TGridCollection*)gROOT->ProcessLine(Form("new TAlienCollection(\"__tmp%d__%s\", 1000000);",stage,file.Data()));
+               cadd = dynamic_cast<TAliceCollection*>(gGrid->OpenCollection(Form("__tmp%d__%s", stage, file.Data()), 1000000));
                if (!cbase) cbase = cadd;
                else {
 		  // cholm - Avoid using very slow TAlienCollection 
 		  // cbase->Add(cadd);
 		  // cholm - Use AddFast (via interpreter)
-		  gROOT->ProcessLine(Form("((TAlienCollection*)%p)->AddFast((TGridCollection*)%p)",cbase,cadd));
+                  cbase->AddFast(cadd);
 
                   delete cadd;
                }   
                nstart += ncount;
             } else {
                if (cbase && fNrunsPerMaster<2) {
-                  cadd = (TGridCollection*)gROOT->ProcessLine(Form("new TAlienCollection(\"__tmp%d__%s\", 1000000);",stage,file.Data()));
+                 cadd = dynamic_cast<TAliceCollection*>(gGrid->OpenCollection(Form("__tmp%d__%s", stage, file.Data()), 1000000));
                   printf("... please wait - TAlienCollection::Add() scales badly...\n");
 		  // cholm - Avoid using very slow TAlienCollection 
 		  // cbase->Add(cadd);
 		  // cholm - Use AddFast (via interpreter)
-		  gROOT->ProcessLine(Form("((TAlienCollection*)%p)->AddFast((TGridCollection*)%p)",cbase,cadd));
+                  cbase->AddFast(cadd);
                   delete cadd;
                   cbase->ExportXML(Form("file://%s", file.Data()),kFALSE,kFALSE, file, "Merged entries for a run");
                   delete cbase; cbase = 0;               
@@ -1449,14 +1479,14 @@ Bool_t AliAnalysisAlien::CreateDataset(const char *pattern)
             nruns++;
             if (((nruns-1)%fNrunsPerMaster) == 0) {
                schunk = os->GetString();
-               cbase = (TGridCollection*)gROOT->ProcessLine(Form("new TAlienCollection(\"%s\", 1000000);",file.Data()));
+               cbase = dynamic_cast<TAliceCollection*>(gGrid->OpenCollection(file.Data(), 1000000));
             } else {
-               cadd = (TGridCollection*)gROOT->ProcessLine(Form("new TAlienCollection(\"%s\", 1000000);",file.Data()));
+               cadd = dynamic_cast<TAliceCollection*>(gGrid->OpenCollection(file.Data(), 1000000));
                printf("   Merging collection <%s> into masterjob input...\n", file.Data());
 	       // cholm - Avoid using very slow TAlienCollection 
 	       // cbase->Add(cadd);
 	       // cholm - Use AddFast (via interpreter)
-	       gROOT->ProcessLine(Form("((TAlienCollection*)%p)->AddFast((TGridCollection*)%p)",cbase,cadd));
+               cbase->AddFast(cadd);
                delete cadd;
             }
             if ((nruns%fNrunsPerMaster)!=0 && os!=arr->Last()) {
@@ -1510,7 +1540,7 @@ Bool_t AliAnalysisAlien::CreateDataset(const char *pattern)
             ncount = 0;
             stage++;
             if (gSystem->AccessPathName(file) || TestBit(AliAnalysisGrid::kTest) || fOverwriteMode) {
-               command = "alien_find ";
+               command = "find ";
                command +=  Form("%s -o %d ",options.Data(), nstart);
                command += path;
                command += delimiter;
@@ -1519,7 +1549,10 @@ Bool_t AliAnalysisAlien::CreateDataset(const char *pattern)
                //TGridResult *res = gGrid->Command(command);
                //if (res) delete res;
                // Write standard output to file
-               gSystem->Exec(Form("%s > __tmp%d__%s 2>/dev/null", command.Data(), stage, file.Data()));
+               //gSystem->Exec(Form("%s > __tmp%d__%s 2>/dev/null", command.Data(), stage, file.Data()));
+               TGridCollection *tmp = gGrid->OpenCollectionQuery(gGrid->Command(command), kTRUE);
+               tmp->ExportXML(Form("file://__tmp%d__%s", stage, file.Data()), kFALSE, kFALSE, command.Data());
+               delete tmp;
                //gROOT->ProcessLine(Form("gGrid->Stdout(); > __tmp%d__%s", stage,file.Data()));
                Bool_t hasGrep = (gSystem->Exec("grep --version 2>/dev/null > /dev/null")==0)?kTRUE:kFALSE;
                Bool_t nullFile = kFALSE;
@@ -1549,24 +1582,24 @@ Bool_t AliAnalysisAlien::CreateDataset(const char *pattern)
                           file.Data(),gMaxEntries);
                   return kFALSE;
                }           
-               cadd = (TGridCollection*)gROOT->ProcessLine(Form("new TAlienCollection(\"__tmp%d__%s\", 1000000);",stage,file.Data()));
+               cadd = dynamic_cast<TAliceCollection*>(gGrid->OpenCollection(Form("__tmp%d__%s", stage, file.Data())));
                if (!cbase) cbase = cadd;
                else {
 		 // cholm - Avoid using very slow TAlienCollection 
 		 // cbase->Add(cadd);
 		 // cholm - Use AddFast (via interpreter)
-		 gROOT->ProcessLine(Form("((TAlienCollection*)%p)->AddFast((TGridCollection*)%p)",cbase,cadd));
+                  cbase->AddFast(cadd);
                   delete cadd;
                }   
                nstart += ncount;
             } else {
                if (cbase && fNrunsPerMaster<2) {
-                  cadd = (TGridCollection*)gROOT->ProcessLine(Form("new TAlienCollection(\"__tmp%d__%s\", 1000000);",stage,file.Data()));
+                  cadd = dynamic_cast<TAliceCollection*>(gGrid->OpenCollection(Form("__tmp%d__%s", stage, file.Data())));
                   printf("... please wait - TAlienCollection::Add() scales badly...\n");
 		 // cholm - Avoid using very slow TAlienCollection 
 		 // cbase->Add(cadd);
 		 // cholm - Use AddFast (via interpreter)
-		 gROOT->ProcessLine(Form("((TAlienCollection*)%p)->AddFast((TGridCollection*)%p)",cbase,cadd));
+                  cbase->AddFast(cadd);
                   delete cadd;
                   cbase->ExportXML(Form("file://%s", file.Data()),kFALSE,kFALSE, file, "Merged entries for a run");
                   delete cbase; cbase = 0;               
@@ -1604,13 +1637,13 @@ Bool_t AliAnalysisAlien::CreateDataset(const char *pattern)
             printf("   Merging collection <%s> into %d runs chunk...\n",file.Data(),fNrunsPerMaster);
             if (((nruns-1)%fNrunsPerMaster) == 0) {
                schunk = Form(fRunPrefix.Data(), irun);
-               cbase = (TGridCollection*)gROOT->ProcessLine(Form("new TAlienCollection(\"%s\", 1000000);",file.Data()));
+               cbase = dynamic_cast<TAliceCollection*>(gGrid->OpenCollection(file.Data()));
             } else {
-               cadd = (TGridCollection*)gROOT->ProcessLine(Form("new TAlienCollection(\"%s\", 1000000);",file.Data()));
+               cadd = dynamic_cast<TAliceCollection*>(gGrid->OpenCollection(file.Data()));
 	       // cholm - Avoid using very slow TAlienCollection 
 	       // cbase->Add(cadd);
 	       // cholm - Use AddFast (via interpreter)
-	       gROOT->ProcessLine(Form("((TAlienCollection*)%p)->AddFast((TGridCollection*)%p)",cbase,cadd));
+	       cbase->AddFast(cadd);
                delete cadd;
             }
             format = Form("%%s_%s.xml", fRunPrefix.Data());
@@ -1666,6 +1699,13 @@ Bool_t AliAnalysisAlien::CreateJDL()
       Error("CreateJDL", "Alien connection required");
       return kFALSE;
    }   
+   // Initialize the JDLs
+   if (fGridJDL) delete fGridJDL;
+   fGridJDL = gGrid->GetJDLGenerator();
+
+   if (fMergingJDL) delete fMergingJDL;
+   fMergingJDL = gGrid->GetJDLGenerator();
+
    // Check validity of alien workspace
    TString workdir;
    if (!fProductionMode && !fGridWorkingDir.BeginsWith("/alice")) workdir = gGrid->GetHomeDirectory();
@@ -2309,7 +2349,7 @@ void AliAnalysisAlien::CheckDataType(const char *lfn, Bool_t &isCollection, Bool
    if (isXml) {
    // Open xml collection and check if there are tag files inside
       msg += " type: xml_collection;";
-      TGridCollection *coll = (TGridCollection*)gROOT->ProcessLine(Form("TAlienCollection::Open(\"alien://%s\",1);",lfn));
+      TGridCollection *coll = gGrid->OpenCollection(Form("alien://%s", lfn),1);
       if (!coll) {
          msg += " using_tags: No (unknown)";
          Info("CheckDataType", "%s", msg.Data());
@@ -2455,14 +2495,15 @@ const char *AliAnalysisAlien::GetJobStatus(Int_t jobidstart, Int_t lastid, Int_t
    TGridJobStatusList *list = gGrid->Ps("");
    if (!list) return mstatus;
    Int_t nentries = list->GetSize();
-   TGridJobStatus *status;
+   TAliceJobStatus *status;
    Int_t pid;
    for (Int_t ijob=0; ijob<nentries; ijob++) {
-      status = (TGridJobStatus *)list->At(ijob);
-      pid = gROOT->ProcessLine(Form("atoi(((TAlienJobStatus*)%p)->GetKey(\"queueId\"));", status));
+      status = dynamic_cast<TAliceJobStatus*>(list->At(ijob));
+      // To avoid explicit casting, we need TGridJobStatus::GetKey interface
+      pid = atoi(status->GetKey("queueId"));
       if (pid<jobidstart) continue;
       if (pid == lastid) {
-         gROOT->ProcessLine(Form("sprintf((char*)%p,((TAlienJobStatus*)%p)->GetKey(\"status\"));",mstatus, status));
+         strncpy(mstatus, status->GetKey("status"), 20);
       }   
       switch (status->GetStatus()) {
          case TGridJobStatus::kWAITING:
@@ -2675,8 +2716,9 @@ void AliAnalysisAlien::SetDefaults()
 {
 // Set default values for everything. What cannot be filled will be left empty.
    if (fGridJDL) delete fGridJDL;
-   fGridJDL = (TGridJDL*)gROOT->ProcessLine("new TAlienJDL()");
-   fMergingJDL = (TGridJDL*)gROOT->ProcessLine("new TAlienJDL()");
+   if (fMergingJDL) delete fMergingJDL;
+   fGridJDL                    = NULL;
+   fMergingJDL                 = NULL;
    fPrice                      = 1;
    fTTL                        = 30000;
    fSplitMaxInputFileNumber    = 100;
@@ -2773,7 +2815,8 @@ Bool_t AliAnalysisAlien::CheckMergedFiles(const char *filename, const char *alie
    //TGridResult *res = gGrid->Command(Form("find -x Stage_%d %s %s", stage, aliendir, pattern.Data()));
    //if (res) delete res;
    // Write standard output to file
-   gSystem->Exec(Form("alien_find -x Stage_%d %s %s > Stage_%d.xml 2>/dev/null", stage, aliendir, pattern.Data(), stage));
+   TGridCollection *tmp = gGrid->OpenCollectionQuery(gGrid->Command(Form("find %s %s", aliendir, pattern.Data())),kTRUE);
+  tmp->ExportXML(Form("file://Stage_%d.xml",stage),kFALSE,kFALSE,Form("Stage_%d",stage));
    //gROOT->ProcessLine(Form("gGrid->Stdout(); > %s", Form("Stage_%d.xml",stage)));
    // Count the number of files inside
    ifstream ifile;
@@ -2875,7 +2918,7 @@ Bool_t AliAnalysisAlien::MergeInfo(const char *output, const char *collection)
 // Merges a collection of output files using concatenation.
    TString scoll(collection);
    if (!scoll.Contains(".xml")) return kFALSE;
-   TGridCollection *coll = (TGridCollection*)gROOT->ProcessLine(Form("TAlienCollection::Open(\"%s\");", collection));
+   TGridCollection *coll = createGridCollection(collection);
    if (!coll) {
       ::Error("MergeInfo", "Input XML %s collection empty.", collection);
       return kFALSE;
@@ -2935,7 +2978,7 @@ Bool_t AliAnalysisAlien::MergeOutput(const char *output, const char *basedir, In
    if (sbasedir.Contains(".xml")) {
       // Merge files pointed by the xml - ignore nmaxmerge and set ichunk to 0
       nmaxmerge = 9999999;
-      TGridCollection *coll = (TGridCollection*)gROOT->ProcessLine(Form("TAlienCollection::Open(\"%s\");", basedir));
+      TGridCollection *coll = createGridCollection(basedir);
       if (!coll) {
          ::Error("MergeOutput", "Input XML collection empty.");
          return kFALSE;
@@ -3722,7 +3765,7 @@ Bool_t AliAnalysisAlien::StartAnalysis(Long64_t nentries, Long64_t firstEntry)
       jobID = fGridJobIDs;
    }   
          
-   if (fDropToShell) {
+   if (fDropToShell && gGrid->InheritsFrom("TAlien")) {
       Info("StartAnalysis", "\n#### STARTING AN ALIEN SHELL FOR YOU. EXIT WHEN YOUR JOB %s HAS FINISHED. #### \
       \n You may exit at any time and terminate the job later using the option <terminate> \
       \n ##################################################################################", jobID.Data());
@@ -3901,7 +3944,7 @@ Bool_t AliAnalysisAlien::SubmitMerging()
       if (!fRunNumbers.Length() && !fRunRange[0]) break;
    }
    if (!ntosubmit) return kTRUE;
-   if (fDropToShell) {
+   if (fDropToShell && gGrid->InheritsFrom("TAlien")) {
       Info("StartAnalysis", "\n #### STARTING AN ALIEN SHELL FOR YOU. You can exit any time or inspect your jobs in a different shell.##########\
                              \n Make sure your jobs are in a final state (you can resubmit failed ones via 'masterjob <id> resubmit ERROR_ALL')\
                              \n Rerun in 'terminate' mode to submit all merging stages, each AFTER the previous one completed. The final merged \
@@ -4028,6 +4071,7 @@ void AliAnalysisAlien::WriteAnalysisFile()
             if (handler->InheritsFrom("AliAODInputHandler")) TObject::SetBit(AliAnalysisGrid::kUseAOD);
          }
       }
+      if (fMCLoop) mgr->SetNMCevents(fNMCevents);
       TDirectory *cdir = gDirectory;
       TFile *file = TFile::Open(analysisFile, "RECREATE");
       file->SetCompressionSettings(ROOT::CompressionSettings(ROOT::kZLIB, 1));
@@ -4369,7 +4413,7 @@ void AliAnalysisAlien::WriteAnalysisMacro(Long64_t nentries, Long64_t firstentry
          out << "   printf(\"***************************************\\n\");" << endl;
          out << "   printf(\"    Getting chain of trees %s\\n\", treename.Data());" << endl;
          out << "   printf(\"***************************************\\n\");" << endl;
-         out << "   TAlienCollection *coll = dynamic_cast<TAlienCollection *>(TAlienCollection::Open(xmlfile));" << endl;
+         out << "   TGridCollection *coll = gGrid->OpenCollection(xmlfile);" << endl;
          out << "   if (!coll) {" << endl;
          out << "      ::Error(\"CreateChain\", \"Cannot create an AliEn collection from %s\", xmlfile);" << endl;
          out << "      return NULL;" << endl;
@@ -4413,6 +4457,7 @@ void AliAnalysisAlien::WriteAnalysisMacro(Long64_t nentries, Long64_t firstentry
             out << "      while ((cfriend=(TChain*)nextfriend())) {" << endl;
             out << "         fileFriend = bpath;" << endl;
             out << "         fileFriend += cfriend->GetTitle();" << endl;
+#if ROOT_VERSION_CODE < ROOT_VERSION(5,99,99)
             out << "         TFile *file = TFile::Open(fileFriend);" << endl;
             out << "         if (file) {" << endl;
             out << "            file->Close();" << endl;
@@ -4421,6 +4466,11 @@ void AliAnalysisAlien::WriteAnalysisMacro(Long64_t nentries, Long64_t firstentry
             out << "            ::Fatal(\"CreateChain\", \"Cannot open friend file: %s\", fileFriend.Data());" << endl;
             out << "            return 0;" << endl;
             out << "         }" << endl;
+#else
+            // No need to check the friend chain files individually, we can use later-on in ROOT6
+            // the open status stored in each chain after calling TChain::GetEntries
+            out << "         cfriend->Add(fileFriend.Data());" << endl;
+#endif
             out << "      }" << endl;
          }
          out << "   }" << endl;
@@ -4430,7 +4480,7 @@ void AliAnalysisAlien::WriteAnalysisMacro(Long64_t nentries, Long64_t firstentry
          out << "   }" << endl;
          out << "   return chain;" << endl;
          out << "}" << endl << endl;
-      }   
+      }
       if (hasANALYSISalice) {
          out <<"//________________________________________________________________________________" << endl;
          out << "Bool_t SetupPar(const char *package) {" << endl;

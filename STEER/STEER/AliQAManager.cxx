@@ -95,7 +95,8 @@ AliQAManager::AliQAManager() :
   fTasks(""),  
   fEventSpecie(AliRecoParam::kDefault), 
   fPrintImage(kTRUE), 
-  fSaveData(kTRUE) 
+  fSaveData(kTRUE) ,
+  fActiveOnlineDetectors()
 {
   // default ctor
   fMaxEvents = fNumberOfEvents ; 
@@ -132,7 +133,8 @@ AliQAManager::AliQAManager(AliQAv1::MODE_t mode, const Char_t* gAliceFilename) :
   fTasks(""), 
   fEventSpecie(AliRecoParam::kDefault), 
   fPrintImage(kTRUE), 
-  fSaveData(kTRUE) 
+  fSaveData(kTRUE),
+  fActiveOnlineDetectors()
 {
   // default ctor
   fMaxEvents = fNumberOfEvents ; 
@@ -169,7 +171,8 @@ AliQAManager::AliQAManager(const AliQAManager & qas) :
   fTasks(qas.fTasks), 
   fEventSpecie(qas.fEventSpecie), 
   fPrintImage(qas.fPrintImage), 
-  fSaveData(qas.fSaveData) 
+  fSaveData(qas.fSaveData),
+  fActiveOnlineDetectors()
 
 {
   // cpy ctor
@@ -869,7 +872,7 @@ Bool_t AliQAManager::MergeXML(const Char_t * collectionFile, const Char_t * subF
   // Open the file collection 
   AliInfoClass(Form("*** Create Collection       ***\n***  Wk-Dir = |%s|             \n***  Coll   = |%s|             \n",gSystem->WorkingDirectory(), collectionFile));              	
   
-  TGridCollection * collection = (TGridCollection*)gROOT->ProcessLine(Form("TAlienCollection::Open(\"%s\")",collectionFile));
+  TGridCollection * collection = gGrid->OpenCollection(collectionFile);
   TGridResult* result = collection->GetGridResult("", 0, 0);
   
   Int_t index = 0  ;

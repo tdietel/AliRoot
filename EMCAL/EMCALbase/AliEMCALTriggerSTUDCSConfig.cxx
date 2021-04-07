@@ -25,17 +25,9 @@
 #include <iostream>
 #include <sstream>
 
-/// \cond CLASSIMP
 ClassImp(AliEMCALTriggerSTUDCSConfig) ;
-/// \endcond
-
-/// \cond CLASSIMP
 ClassImp(AliEMCALTriggerSTUDCSConfig::AliEMCALTriggerSTUTRUErrorCount) ;
-/// \endcond
 
-///
-/// Default constructor.
-//_____________________________________________________________________________
 AliEMCALTriggerSTUDCSConfig::AliEMCALTriggerSTUDCSConfig() : TObject(),
 fGetRawData(1),
 fRegion(0xFFFFFFFF),
@@ -56,9 +48,6 @@ fMedian(0)
   memset(fTRUErrorCounts, 0, sizeof(TClonesArray *) * 68);
 }
 
-///
-/// Copy constructor.
-//_____________________________________________________________________________
 AliEMCALTriggerSTUDCSConfig::AliEMCALTriggerSTUDCSConfig(const AliEMCALTriggerSTUDCSConfig &obj) : TObject(),
 fGetRawData(1),
 fRegion(0xFFFFFFFF),
@@ -99,10 +88,6 @@ fMedian(0)
   SetMedianMode(obj.GetMedianMode());
 }
 
-
-///
-/// Destructor.
-//_____________________________________________________________________________
 AliEMCALTriggerSTUDCSConfig::~AliEMCALTriggerSTUDCSConfig()
 {
   for(int itru = 0; itru < 68; itru++)
@@ -111,22 +96,17 @@ AliEMCALTriggerSTUDCSConfig::~AliEMCALTriggerSTUDCSConfig()
   }
 }
 
-///
-/// Get Segmentation.
-//_____________________________________________________________________________
 void AliEMCALTriggerSTUDCSConfig::GetSegmentation(TVector2& v1, TVector2& v2, TVector2& v3, TVector2& v4) const
 {
   v1.Set(1., 1.);
   v2.Set(2., 2.);
   v3.Set(4., 4.);
   
-  Double_t js = 2 + (fFw >> 16);
+  //Double_t js = 2 + (fFw >> 16); // Old method for getting patch size, valid in Run 1
+  Double_t js = 2 + fPatchSize; // Patch Size = 0 or 2, from OCDB
   v4.Set(js, js);
 }
 
-///
-/// Set TRU error counts.
-//_____________________________________________________________________________
 void  AliEMCALTriggerSTUDCSConfig::SetTRUErrorCounts(Int_t itru, Int_t itime, ULong64_t errorcounts)
 {
   if(itru > 67) return;
@@ -147,9 +127,6 @@ void  AliEMCALTriggerSTUDCSConfig::SetTRUErrorCounts(Int_t itru, Int_t itime, UL
   }
 }
 
-///
-/// \return time-dependent error counts for a given TRU.
-//_____________________________________________________________________________
 TClonesArray *AliEMCALTriggerSTUDCSConfig::GetErrorCountsForTRU(Int_t itru) const
 {
   if(itru > 67) return NULL;
@@ -157,9 +134,6 @@ TClonesArray *AliEMCALTriggerSTUDCSConfig::GetErrorCountsForTRU(Int_t itru) cons
   return fTRUErrorCounts[itru];
 }
 
-///
-/// Checks for equalness according to the time stamp.
-//_____________________________________________________________________________
 Bool_t AliEMCALTriggerSTUDCSConfig::AliEMCALTriggerSTUTRUErrorCount::IsEqual(const TObject *o) const
 {
   const AliEMCALTriggerSTUTRUErrorCount *test = dynamic_cast<const AliEMCALTriggerSTUTRUErrorCount *>(o);
@@ -169,9 +143,6 @@ Bool_t AliEMCALTriggerSTUDCSConfig::AliEMCALTriggerSTUTRUErrorCount::IsEqual(con
   return test->fTime == fTime;
 }
 
-//
-// Compare time-dependent error counts based on the time information.
-//_____________________________________________________________________________
 Int_t AliEMCALTriggerSTUDCSConfig::AliEMCALTriggerSTUTRUErrorCount::Compare(const TObject *o) const
 {
   const AliEMCALTriggerSTUTRUErrorCount *test = dynamic_cast<const AliEMCALTriggerSTUTRUErrorCount *>(o);

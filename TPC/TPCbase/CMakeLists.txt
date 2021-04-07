@@ -18,17 +18,13 @@ set(LIBDEPS)
 if(ALIROOT_ONLINE_MODE)
     message(WARNING "Online build. Disabling TPC space-charge base library.")
 else()
-  if(DEFINED ALITPCCOMMON_DIR)
-    set(ALITPCCOMMON_BUILD_TYPE "ALIROOT")
-    add_subdirectory(${ALITPCCOMMON_DIR}/sources/TPCSpaceChargeBase TPCSpaceChargeBase)
-    include_directories(${ALITPCCOMMON_DIR}/sources/TPCSpaceChargeBase)
-    add_definitions(-DHAVE_ALITPCCOMMON)
-  else()
-    message(FATAL_ERROR "cmake variable ALITPCCOMMON_DIR is not defined")
-  endif()
-  add_subdirectory(test)
-  set(SRCS ${SRCS} AliTPCSpaceCharge3DDriftLine.cxx)
-  set(LIBDEPS ${LIBDEPS} AliTPCSpaceChargeBase)
+    set(ALIGPU_BUILD_TYPE "ALIROOT")
+    add_subdirectory(${AliRoot_SOURCE_DIR}/TPC/TPCSpaceChargeBase TPCSpaceChargeBase)
+    include_directories(${AliRoot_SOURCE_DIR}/TPC/TPCSpaceChargeBase)
+    add_definitions(-DHAVE_ALIGPU)
+    add_subdirectory(test)
+    set(SRCS ${SRCS} AliTPCSpaceCharge3DDriftLine.cxx)
+    set(LIBDEPS ${LIBDEPS} AliTPCSpaceChargeBase)
 endif()
 
 # Module
@@ -39,8 +35,8 @@ add_definitions(-D_MODULE_="${MODULE}")
 include_directories(${AliRoot_SOURCE_DIR}/TPC/${MODULE})
 
 # Additional include folders in alphabetical order except ROOT
-include_directories(${ROOT_INCLUDE_DIR}
-                    ${AliRoot_SOURCE_DIR}/RAW/RAWDatabase
+include_directories(SYSTEM ${ROOT_INCLUDE_DIR})
+include_directories(${AliRoot_SOURCE_DIR}/RAW/RAWDatabase
                     ${AliRoot_SOURCE_DIR}/RAW/RAWDatarec
                     ${AliRoot_SOURCE_DIR}/RAW/dateStream
                     ${AliRoot_SOURCE_DIR}/STEER/CDB

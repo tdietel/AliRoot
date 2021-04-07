@@ -102,6 +102,7 @@ AliTPCTransform::AliTPCTransform():
   fLumiGraphMap(0),
   fCurrentRun(0),             //! current run
   fCurrentTimeStamp(0),       //! current time stamp
+  fAltroLHCShift(0),
   fTimeDependentUpdated(kFALSE),
   fCorrMapMode(kTRUE),
   //
@@ -143,6 +144,7 @@ AliTPCTransform::AliTPCTransform(const AliTPCTransform& transform):
   fLumiGraphMap(transform.fLumiGraphMap ? new TGraph(*transform.fLumiGraphMap) : 0),
   fCurrentRun(transform.fCurrentRun),             //! current run
   fCurrentTimeStamp(transform.fCurrentTimeStamp),       //! current time stamp
+  fAltroLHCShift(transform.fAltroLHCShift),
   fTimeDependentUpdated(transform.fTimeDependentUpdated),
   fCorrMapMode(transform.fCorrMapMode),
   fDebugStreamer(0),
@@ -193,6 +195,7 @@ void AliTPCTransform::Transform(Double_t *x,Int_t *i,UInt_t /*time*/,
   /// line approximation
 
   if (!fCurrentRecoParam) return;
+  x[2] -= fAltroLHCShift; // account for the (BC%4)*100ns/200ns BC-dependent shift
   Int_t row=TMath::Nint(x[0]);
   Int_t pad=TMath::Nint(x[1]);
   Int_t sector=i[0];
@@ -932,13 +935,14 @@ void AliTPCTransform::EvalDistortionMap(int roc, const double xyzSector[3], floa
 }
 
 //______________________________________________________
-void AliTPCTransform::ApplyDistortionMap(int roc, double xyzLab[3])
+void AliTPCTransform::ApplyDistortionMap(int roc, double xyz[3], Bool_t lab)
 {
-  // apply distortion from the map to a point provided in LAB coordinate 
+  // apply distortion from the map to a point provided in lab ot loc coordinate 
   // at given ROC and row (IROC/OROC convention)
-  Global2RotatedGlobal(roc,xyzLab);  // now we are in sector coordinates
-  EvalDistortionMap(roc, xyzLab, fLastCorrRef, kTRUE);
-  EvalDistortionMap(roc, xyzLab, fLastCorr,    kFALSE);
+  // If lab == true, then the coordinate is supplied in lab frame
+  if (lab) Global2RotatedGlobal(roc,xyz);  // now we are in sector coordinates
+  EvalDistortionMap(roc, xyz, fLastCorrRef, kTRUE);
+  EvalDistortionMap(roc, xyz, fLastCorr,    kFALSE);
   //
   if (fLastCorr[3]<1e-6) { // run specific map had no parameterization for this region, override by default
     for (int i=3;i--;) fLastCorr[i] = fLastCorrRef[i];
@@ -972,8 +976,8 @@ void AliTPCTransform::ApplyDistortionMap(int roc, double xyzLab[3])
     fLastCorr[1] += fluct;
     fLastCorr[2] += fluct*zfluctScale; //??
   }
-  for (int i=3;i--;) xyzLab[i] += fLastCorr[i];
-  RotatedGlobal2Global(roc,xyzLab);
+  for (int i=3;i--;) xyz[i] += fLastCorr[i];
+  if (lab) RotatedGlobal2Global(roc,xyz);
   //
 }
 

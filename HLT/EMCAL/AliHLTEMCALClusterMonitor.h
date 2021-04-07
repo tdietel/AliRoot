@@ -28,6 +28,7 @@
 #include "AliHLTCaloClusterDataStruct.h"
 #include "AliHLTCaloClusterReader.h"
 
+class AliESDVZERO;
 
 #include "TH1F.h"
 #include "TH2F.h"
@@ -45,7 +46,7 @@ public:
   /** Destructor */
   virtual ~AliHLTEMCALClusterMonitor();
 
-  Int_t MakeHisto(AliHLTCaloClusterHeaderStruct *caloClusterHeaderPtr);
+  Int_t MakeHisto(AliHLTCaloClusterDataStruct *caloClusterPtr, Int_t nClusters, const AliESDVZERO* esdVZERO);
 
   TObjArray * GetHistograms();
 
@@ -54,16 +55,21 @@ private:
   AliHLTCaloClusterReader* fClusterReaderPtr; // !transient The reader
 
   TObjArray *hList;
-	TH1F *hClusterEne;
+  TH2F *hClusterNumVsV0;
+  TH1F *hClusterEneEMCAL;
+	TH1F *hClusterEneDCAL;
 	TH2F *hClusterEneVsTime;
 	TH1I *hClusterCells;
 	TH2F *hClusterEneVsCells;
 	TH2F *hClusterEtaVsPhi;
+	TH1F *hClusterM02;
+	TH1F *hClusterM20;
+	TH1F *hClusterInvariantMass;
 
   AliHLTEMCALClusterMonitor(const AliHLTEMCALClusterMonitor &);
   AliHLTEMCALClusterMonitor & operator = (const AliHLTEMCALClusterMonitor &);
   
-  ClassDef(AliHLTEMCALClusterMonitor, 0); 
+  ClassDef(AliHLTEMCALClusterMonitor, 1); 
 
 };
 

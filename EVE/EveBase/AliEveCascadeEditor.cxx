@@ -17,6 +17,7 @@
 // Cleanup these includes:
 #include "TGLabel.h"
 #include "TGButton.h"
+#include "TEveGeoShape.h"
 //#include "TGNumberEntry.h"
 //#include "TGColorSelect.h"
 //#include "TGDoubleSlider.h"

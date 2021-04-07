@@ -99,7 +99,7 @@ Bool_t AliESDInputHandler::Init(TTree* tree,  Option_t* opt)
 
     if (!fEvent) fEvent = new AliESDEvent();
     fEvent->ReadFromTree(fTree);
-    fNEvents = fTree->GetEntries();
+    fNEvents = GetEntries();
     if (fReadFriends) ConnectFriends();
 
     if (fMixingHandler) fMixingHandler->Init(tree,  opt);

@@ -172,6 +172,8 @@ class AliESDCaloCluster : public AliVCluster
   UShort_t  * GetClusterMCEdepFraction() const     { return fClusterMCEdepFraction     ; }
   Float_t     GetClusterMCEdepFraction(Int_t mcIndex) const ;
 
+  void        Print(Option_t *option = "") const;
+  
  protected:
   
   TArrayI    * fTracksMatched;    ///< Index of tracks close to cluster. First entry is the most likely match.
@@ -190,8 +192,8 @@ class AliESDCaloCluster : public AliVCluster
   Double32_t   fEnergy;           ///< Energy measured by calorimeter in GeV.
   Double32_t   fDispersion;       ///< Cluster shape dispersion.
   Double32_t   fChi2;             ///< Chi2 of cluster fit (unfolded clusters)
-  Double32_t   fM20;              ///< 2-nd moment along the main eigen axis.
-  Double32_t   fM02;              ///< 2-nd moment along the second eigen axis.
+  Double32_t   fM20;              ///< 2-nd moment along the second eigen axis.
+  Double32_t   fM02;              ///< 2-nd moment along the main eigen axis.
   
   Double32_t   fEmcCpvDistance;   ///< the distance from PHOS EMC rec.point to the closest CPV rec.point.
   

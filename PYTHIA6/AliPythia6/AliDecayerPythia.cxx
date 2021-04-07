@@ -474,6 +474,27 @@ void AliDecayerPythia::ForceDecay()
     case kHadronicDWithout4BodiesWithV0:
       ForceHadronicD(0,1,0);
 	break;
+    case kHadronicDPionicD0:
+        ForceHadronicD(1,0,3,1);
+        break;
+    case kHadronicDWithV0PionicD0:
+        ForceHadronicD(1,1,3,1);
+        break;
+    case kHadronicDWithout4BodiesPionicD0:
+        ForceHadronicD(0,0,3,1);
+        break;
+    case kHadronicDWithout4BodiesWithV0PionicD0:
+        ForceHadronicD(0,1,3,1);
+        break;
+    case kHadronicDPionicD0pure:
+        ForceHadronicD(0,0,3,2);
+        break;
+    case kHadronicDPionicD0K:
+        ForceHadronicD(0,0,3,3);
+        break;
+    case kHadronicDPionicD0pi:
+        ForceHadronicD(0,0,3,4);
+        break;
     case kPhiKK:
 	ForceParticleDecay(333,321,2); // Phi->K+K-
 	break;
@@ -570,7 +591,24 @@ void AliDecayerPythia::ForceDecay()
      case kLcpK0S:
         ForceHadronicD(0,0,2);
         break;
-
+     case kLcpK0SBDTsig:
+        ForceHadronicD(0,0,4);
+        break;
+     case kLcLpi:
+        ForceHadronicD(0,0,5);
+     case kEtaPrime:
+	if(gRandom->Rndm()<0.5) {
+		products1[0]=211;
+		products1[1]=-211;
+		products1[2]=221;
+		mult1[0]=1;
+		mult1[1]=1;
+		mult1[2]=1;
+        	ForceParticleDecay(331,products1,mult1,1);
+	} else {
+		ForceParticleDecay(331,22,2);
+	}
+	break;
     }
 }
 
@@ -621,8 +659,6 @@ void  AliDecayerPythia::ForceBeautyUpgrade()
    } else {
      ForceParticleDecay( 5122, 4122, 1);
    }
-   // Xi_c
-   ForceParticleDecay( 4232, 3312, 1);
    // B+ -> D0pi+
    const Int_t prod[2]={421,211};
    Int_t mult[2]={1,1};
@@ -630,6 +666,9 @@ void  AliDecayerPythia::ForceBeautyUpgrade()
    // B0 -> D*-pi+
    const Int_t prod2[2]={413,211};
    ForceParticleDecay(511,prod2,mult,2,1);
+   // Bs -> Ds-pi+
+   const Int_t prod3[2]={431,211};
+   ForceParticleDecay(531,prod3,mult,2,1);
    // force charm hadronic decays (D mesons and Lc)
    ForceHadronicD(0,0,0);
 }
@@ -656,21 +695,20 @@ Int_t AliDecayerPythia::CountProducts(Int_t channel, Int_t particle)
 }
 
 
-void AliDecayerPythia::ForceHadronicD(Int_t optUse4Bodies, Int_t optUseDtoV0, Int_t optForceLcChannel)
+void AliDecayerPythia::ForceHadronicD(Int_t optUse4Bodies, Int_t optUseDtoV0, Int_t optForceLcChannel, Int_t optUsePionicD0)
 {
 
-  // Xic->Xipipi
-  Int_t Xic = 4232;
-  Int_t productsX[3] = {3312, 211,211}, multX[3] = {1, 1, 1};
-  ForceParticleDecay(Xic, productsX, multX, 3);
-//
+  // OmegaC -> Omega pi
+  Int_t iOmegaC=4332;
+  Int_t productsOc[2]={211, 3334},multOc[2]={1,1};
+  ForceParticleDecay(iOmegaC, productsOc, multOc, 2,1);
 
 
   // Force golden D decay modes
 //
-  const Int_t kNHadrons = 5;
+  const Int_t kNHadrons = 7;
   Int_t channel;
-  Int_t hadron[kNHadrons] = {411,  421, 431, 4112, 4122};
+  Int_t hadron[kNHadrons] = {411,  421, 431, 4112, 4122, 4232, 4132};
 
  
   // for D+ -> K0* (-> K- pi+) pi+
@@ -696,7 +734,9 @@ void AliDecayerPythia::ForceHadronicD(Int_t optUse4Bodies, Int_t optUseDtoV0, In
   Int_t iLambda=3122;
   //for Lambda_c -> antiK0 p
   Int_t iK0bar=-311;
-
+  // for Xic+->Xi-pi+pi+, Xic+->Xi0*pi+,Xi0*->Xi-pi+ and Xic0->Xi-pi+ channels 
+  Int_t iXiMinus=3312,iXiStar0=3324; 
+  
 
   Int_t decayP1[kNHadrons][4] = 
     { 
@@ -704,7 +744,9 @@ void AliDecayerPythia::ForceHadronicD(Int_t optUse4Bodies, Int_t optUseDtoV0, In
       {kKMinus, kPiPlus,    0      , 0},
       {kKPlus , iKstarbar0, 0      , 0},
       {-1     , -1        , -1     , -1},
-      {kProton, iKstarbar0, 0      , 0}
+      {kProton, iKstarbar0, 0      , 0},
+      {kProton, iKstarbar0, 0      , 0},
+      {kPiPlus, iXiMinus,   0      , 0}
     };
   Int_t decayP2[kNHadrons][4] = 
     { 
@@ -712,7 +754,9 @@ void AliDecayerPythia::ForceHadronicD(Int_t optUse4Bodies, Int_t optUseDtoV0, In
       {kKMinus   , kPiPlus, kPiPlus, kPiMinus},
       {iPhi      , kPiPlus, 0      , 0},
       {-1        , -1     , -1     , -1},
-      {iDeltaPP  , kKMinus, 0      , 0}
+      {iDeltaPP  , kKMinus, 0      , 0},
+      {kProton   , kKMinus, kPiPlus, 0},
+      {-1        ,     -1 , -1     , -1}
     };
   Int_t decayP3[kNHadrons][4] = 
     { 
@@ -720,7 +764,9 @@ void AliDecayerPythia::ForceHadronicD(Int_t optUse4Bodies, Int_t optUseDtoV0, In
       {kKMinus   , kPiPlus, iRho0   , 0},
       {kKPlus    , iK0bar , 0       , 0},
       {-1        , -1     , -1      , -1},
-      {kProton   , kKMinus, kPiPlus , 0}
+      {kProton   , kKMinus, kPiPlus , 0},
+      {kPiPlus   , kPiPlus, iXiMinus, 0},
+      {-1        ,     -1 , -1     , -1}
     };
   // for Lambda_c -> Lambda_1520 pi+ -> p K- pi+, D0-> K*0 pi+ pi- -> K3pi
     Int_t decayP4[kNHadrons][4] =
@@ -729,26 +775,33 @@ void AliDecayerPythia::ForceHadronicD(Int_t optUse4Bodies, Int_t optUseDtoV0, In
       {iKstarbar0  , kPiPlus , kPiMinus,  0},
       {-1          , -1      , -1      , -1},
       {-1          , -1      , -1      , -1},
-      {iLambda1520 , kPiPlus ,  0      ,  0}
+      {iLambda1520 , kPiPlus ,  0      ,  0},
+      {kPiPlus     , iXiStar0, 0      ,  0},
+      {-1          ,      -1 , -1     , -1}
     };
-  // for Lambda_c -> Lambda pi+ 
+  // for Lambda_c -> Lambda pi+, D0 -> pi0 pi+ pi- 
     Int_t decayP5[kNHadrons][4] =
     {
       {iK0bar    , kPiPlus,  0      ,  0},
+      {kPiPlus   , kPiMinus, kPi0   ,  0},
       {-1        , -1     , -1      , -1},
       {-1        , -1     , -1      , -1},
-      {-1        , -1     , -1      , -1},
-      {iLambda   , kPiPlus,  0      ,  0}
+      {iLambda   , kPiPlus,  0      ,  0},
+      {-1          , -1      , -1      , -1},
+      {-1          , -1      , -1      , -1}
     };
 
-    // for Lambda_c -> K0bar p
+    // for Lambda_c -> K0bar p, D0 -> K- pi+ pi0, D+ -> K0s pi+ pi0
     Int_t decayP6[kNHadrons][4] =
     {
+      {iK0bar    , kPiPlus, kPi0    ,  0},
+      {kKMinus   , kPiPlus, kPi0    ,  0},
       {-1        , -1     , -1      , -1},
       {-1        , -1     , -1      , -1},
-      {-1        , -1     , -1      , -1},
-      {-1        , -1     , -1      , -1},
-      {kProton    , iK0bar,  0      ,  0}
+      {kProton    , iK0bar,  0      ,  0},
+      {-1          , -1      , -1      , -1},
+      {-1          , -1      , -1      , -1}
+
     };
 
   if(optUse4Bodies==0){
@@ -762,6 +815,53 @@ void AliDecayerPythia::ForceHadronicD(Int_t optUse4Bodies, Int_t optUseDtoV0, In
     for(Int_t iDau=0;iDau<4;iDau++){
       decayP3[2][iDau]=-1; // swicth off Ds->K0K+
       decayP5[0][iDau]=-1; // swicth off D+->K0pi+
+    }
+  }
+  if(optUsePionicD0==0){
+    for(Int_t iDau=0;iDau<4;iDau++){
+      decayP5[1][iDau]=-1; // switch off D0->pi0pi+pi-
+      decayP6[1][iDau]=-1; // switch off D0->pi0pi+K-
+      decayP6[0][iDau]=-1; // switch off D+->K0spi+pi0
+    }
+  } else {
+    // Pi0 options
+    // - 1: both pionic and D0 -> K- pi+
+    // - 2: only pionic modes, both D0 -> K- pi+ pi0 and D0 -> pi0 pi+ pi-
+    // - 3: only pionic modes, only D0 -> K- pi+ pi0
+    // - 4: only pionic modes, only D0 -> pi0 pi+ pi- 
+    switch(optUsePionicD0){
+    case 1: break;
+    case 2: {
+      // switch off D0 -> K- pi+
+      for(Int_t iDau=0;iDau<4;iDau++){
+        decayP1[1][iDau]=-1;
+      }
+      break;
+    }
+    case 3: {
+      for(Int_t iDau=0;iDau<4;iDau++){
+        decayP1[1][iDau]=-1; // switch off D0 -> K- pi+
+        decayP5[1][iDau]=-1; // switch off D0->pi0pi+pi-
+      }
+      break;
+    }
+    case 4: {
+      for(Int_t iDau=0;iDau<4;iDau++){
+        decayP1[1][iDau]=-1; // switch off D0 -> K- pi+
+        decayP6[1][iDau]=-1; // switch off D0->pi0pi+K-
+      }
+      break;
+    }
+    default: break;
+    };
+    // For D+ force decays into pi0 + X
+    for(Int_t iDau=0;iDau<4;iDau++){
+      // D+
+      decayP1[0][iDau]=-1;
+      decayP2[0][iDau]=-1;
+      decayP3[0][iDau]=-1;
+      decayP4[0][iDau]=-1;
+      decayP5[0][iDau]=-1;
     }
   }
 
@@ -836,13 +936,34 @@ void AliDecayerPythia::ForceHadronicD(Int_t optUse4Bodies, Int_t optUseDtoV0, In
 
    Int_t prodLcpK0S[2] = {2212,311};
    Int_t multLcpK0S[2] = {1,1};
+
+   Int_t prodLcLambdaPiPlPi0[3] = {iLambda, kPiPlus, kPi0};
+   Int_t multLcLambdaPiPlPi0[3] = {1,1,1};
+   
+   Int_t prodLcLambdaPi[2] = {3122, 211};
+   Int_t multLcLambdaPi[2] = {1,1};
+   
     if (optForceLcChannel == 1) { //pKpi
       ForceParticleDecay(4122,prodLcpKpi,multLcpKpi,3,1);
     }
     if (optForceLcChannel == 2) { //pK0S
-      ForceParticleDecay(4122,prodLcpK0S,multLcpK0S,2,1);
+      ForceParticleDecay(4122,prodLcpK0S,multLcpK0S,2,1); //Lc to p + K0
     }
-      
+    if(optForceLcChannel == 3) { // Lambda Pi+ Pi0
+      ForceParticleDecay(4122, prodLcLambdaPiPlPi0, multLcLambdaPiPlPi0, 3, 1);
+    }
+    
+    if(optForceLcChannel == 4) { // pK0S for BDT signal training: force all K0->K0S->pi+pi-
+      ForceParticleDecay(4122,prodLcpK0S,multLcpK0S,2,1); //Lc to p + K0
+      ForceParticleDecay(311,310,1); // K0 -> K0S
+      ForceParticleDecay(310,211,2); // K0S -> pi+ pi-
+    }
+    if(optForceLcChannel == 5) { // Lc -> Lambda Pi+
+      ForceParticleDecay(4122,prodLcLambdaPi,multLcLambdaPi,2,1);
+    }
+    
+
+  
 
 }
 

@@ -22,29 +22,47 @@ class AliGenExtFile : public AliGenMC
     AliGenExtFile();
     AliGenExtFile(Int_t npart);
      virtual ~AliGenExtFile();
-    // Initialise 
+    // Initialise
     virtual void Init();
     // generate event
     virtual void Generate();
     void SetReader(AliGenReader* reader) {fReader = reader;}
     void SetStartEvent(Int_t startEvent) {fStartEvent = startEvent;}
     AliGenReader* Reader() const {return fReader;}
+
+    ///
+    virtual void SetMultiplicityTrigger(Double_t multCut) { fSetMultTrig = kTRUE; fMultCut = multCut; }               // Enable base multiplicity trigger and set the cut
+    virtual void SetPtTrigger(Double_t ptCut) { fSetPtTrig = kTRUE; fPtCut = ptCut; }                                 // Enable base pT trigger and set the cut
+    virtual void SetUserTrigger(Bool_t (*fn)(AliStack*)) { fSetUserTrig = kTRUE; fUserTrigger = fn; }                 // Enable user trigger
+    ///
+
  protected:
     void CdEventFile();
     const Text_t     *fFileName;      //! File to read from
     AliGenReader     *fReader;        //! Reader to read the file
     Int_t  fStartEvent; //! Start event number
 
+    ///
+    // Base Multiplicity and pT triggers
+    Int_t  fLimitDiscardedEvents;                                                             // Limit on the events discarded consecutively by the trigger
+    Bool_t fSetMultTrig;                                                                      // TRUE if the multiplicity trigger is set
+    Bool_t fSetPtTrig;                                                                        // TRUE if the pT trigger is set
+    Bool_t fSetUserTrig;
+
+    Bool_t MultiplicityTrigger(AliStack *stack);                                              // Base multiplicity trigger method
+    Bool_t PtTrigger(AliStack *stack);                                                        // Base pT trigger method
+
+    Int_t fMultCut;
+    Double_t fPtCut;
+
+    // Custom trigger
+    Bool_t (*fUserTrigger)(AliStack*); //!
+    ///
+
  private:
     AliGenExtFile(const AliGenExtFile &ext);
     AliGenExtFile & operator=(const AliGenExtFile & rhs);
-    
+
   ClassDef(AliGenExtFile,2) //Generate particles from external file
 };
 #endif
-
-
-
-
-
-

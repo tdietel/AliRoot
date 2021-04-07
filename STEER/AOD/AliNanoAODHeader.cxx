@@ -1,54 +1,78 @@
+#include <TObjString.h>
 #include "AliNanoAODHeader.h"
 #include "AliLog.h"
 
 ClassImp(AliNanoAODHeader)
 
+Bool_t AliNanoAODHeader::fFatalMode = kFALSE;
+
 AliNanoAODHeader::AliNanoAODHeader():
   AliVAODHeader(),
   AliNanoAODStorage(),
   fCentralityMethod("V0M"),
+  fBunchCrossNumber(-1),
+  fOrbitNumber(-1),
+  fPeriodNumber(-1),
   fCentr(-1),
   fCentrTRK(-1),
   fCentrCL0(-1),
   fCentrCL1(-1),
+  fFiredTriggerClasses(-1),
   fMagField(-1),
   fOfflineTrigger(-1),
-  fRunNumber(-1)
+  fRunNumber(-1),
+  fNumberOfESDTracks(-1)
 {
 
   // default ctor
-
+  
+  for (int i=0; i<4; i++)
+    fT0Spread[i] = -1;
 }
 
 AliNanoAODHeader::AliNanoAODHeader(Int_t size):
   AliVAODHeader(),
   AliNanoAODStorage(),
   fCentralityMethod("V0M"),
+  fBunchCrossNumber(-1),
+  fOrbitNumber(-1),
+  fPeriodNumber(-1),
   fCentr(-1),
   fCentrTRK(-1),
   fCentrCL0(-1),
   fCentrCL1(-1),
+  fFiredTriggerClasses(-1),
   fMagField(-1),
   fOfflineTrigger(-1),
-  fRunNumber(-1)
+  fRunNumber(-1),
+  fNumberOfESDTracks(-1)
 {
-  AllocateInternalStorage(size, 0);
+  for (int i=0; i<4; i++)
+    fT0Spread[i] = -1;
 
+  AllocateInternalStorage(size, 0);
 }
 
 AliNanoAODHeader::AliNanoAODHeader(Int_t size, Int_t sizeInt):
   AliVAODHeader(),
   AliNanoAODStorage(),
   fCentralityMethod("V0M"),
+  fBunchCrossNumber(-1),
+  fOrbitNumber(-1),
+  fPeriodNumber(-1),
   fCentr(-1),
   fCentrTRK(-1),
   fCentrCL0(-1),
   fCentrCL1(-1),
+  fFiredTriggerClasses(-1),
   fMagField(-1),
   fOfflineTrigger(-1),
-  fRunNumber(-1)
+  fRunNumber(-1),
+  fNumberOfESDTracks(-1)
 {
-
+  for (int i=0; i<4; i++)
+    fT0Spread[i] = -1;
+  
   AllocateInternalStorage(size, sizeInt);
 }
 
@@ -88,7 +112,7 @@ Double_t AliNanoAODHeader::GetCentr (const char *x) const {
 } 
 
 Int_t  AliNanoAODHeader::GetRunNumber() const { 
-   if (fRunNumber>0) return Int_t(GetVar(fRunNumber));
+   if (fRunNumber>-1) return GetVarInt(fRunNumber);
    return 0;
 
 } 
@@ -166,5 +190,8 @@ Int_t AliNanoAODHeader::GetVarIndex(TString varName){
 } 
 
 void AliNanoAODHeader::NotImplemented(void) const {
-  AliError("Not implemented");
+  if (fFatalMode)
+    AliFatal("Not implemented");
+  else
+    AliError("Not implemented");
 }

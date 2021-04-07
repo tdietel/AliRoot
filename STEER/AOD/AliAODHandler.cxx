@@ -258,10 +258,9 @@ void AliAODHandler::StoreMCParticles(){
   // Get the Event Header 
   // 
 
-  AliHeader* header = fMCEventH->MCEvent()->Header();
+  //  AliHeader* header = fMCEventH->MCEvent()->Header();
    // get the MC vertex
-  AliGenEventHeader* genHeader = 0;
-  if (header) genHeader = header->GenEventHeader();
+  AliGenEventHeader* genHeader = fMCEventH->MCEvent()->GenEventHeader();
   if (genHeader) {
       TArrayF vtxMC(3);
       genHeader->PrimaryVertex(vtxMC);
@@ -300,6 +299,7 @@ void AliAODHandler::StoreMCParticles(){
   Int_t np    = mcEvent->GetNumberOfTracks();
   Int_t nprim = mcEvent->GetNumberOfPrimaries();
 
+  mcHeader->SetBGEventReused(mcEvent->GetBGEventReused());
 
   Int_t j = 0;
   TClonesArray& l = *mcarray;
@@ -322,9 +322,10 @@ void AliAODHandler::StoreMCParticles(){
 	  
 	  mcpartTmp.SetStatus(mcpart->Particle()->GetStatusCode());
 	  mcpartTmp.SetMCProcessCode(mcpart->Particle()->GetUniqueID());
+	  mcpartTmp.SetFromSubsidiaryEvent(mcpart->IsFromSubsidiaryEvent());
 	  // 
-	  Int_t d0 =  mcpartTmp.GetDaughter(0);
-	  Int_t d1 =  mcpartTmp.GetDaughter(1);
+	  Int_t d0 =  mcpartTmp.GetDaughterLabel(0);
+	  Int_t d1 =  mcpartTmp.GetDaughterLabel(1);
 	  Int_t m =   mcpartTmp.GetMother();
 	  
 	  // other than for the track labels, negative values mean

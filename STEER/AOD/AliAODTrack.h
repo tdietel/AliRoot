@@ -113,6 +113,8 @@ class AliAODTrack : public AliVTrack {
   AliAODTrack(const AliAODTrack& trk); 
   AliAODTrack& operator=(const AliAODTrack& trk);
 
+  virtual void Clear(Option_t* = "");
+  
   // kinematics
   virtual Double_t OneOverPt() const { return (fMomentum[0] != 0.) ? 1./fMomentum[0] : -999.; }
   virtual Double_t Phi()       const { return fMomentum[1]; }
@@ -130,7 +132,14 @@ class AliAODTrack : public AliVTrack {
   virtual Double_t Zv() const { return GetProdVertex() ? GetProdVertex()->GetZ() : -999.; }
   virtual Bool_t   XvYvZv(Double_t x[3]) const { x[0] = Xv(); x[1] = Yv(); x[2] = Zv(); return kTRUE; }
 
-  Double_t Chi2perNDF()  const { return fChi2perNDF; }
+  Double_t Chi2perNDF()  const {
+    ///
+    /// WARNING: fChi2perNDF=chi2/(nTPCclus-5)
+    ///   from AliAnalysisTaskESDfilter::Chi2perNDF
+    ///   NDF is not correct, to be used only for checks
+    ///
+    return fChi2perNDF;
+  }
 
   UShort_t GetTPCnclsS(Int_t i0=0,Int_t i1=159)  const { 
     UShort_t cl = fTPCSharedMap.CountBits(i0)-fTPCSharedMap.CountBits(i1);
@@ -147,7 +156,26 @@ class AliAODTrack : public AliVTrack {
   Double_t GetTPCchi2() const {
     Int_t nTPCclus=GetNcls(1);
     if(fChi2perNDF>0. && nTPCclus > 5) return fChi2perNDF*(nTPCclus-5);
-    else return 999.;
+    else return 9999.;
+  }
+  Double_t GetTPCchi2perCluster() const {
+    Double_t chi2tpc=GetTPCchi2();
+    if(chi2tpc<9998.) return chi2tpc/GetNcls(1);
+    else return 9999.;
+  }
+  Double_t GetTPCchi2perNDF() const {
+    Int_t ndf=(2*GetNcls(1)-5);
+    Double_t chi2tpc=GetTPCchi2();
+    if(chi2tpc<9998.) return chi2tpc/ndf;
+    else return 9999.;
+  }
+  Double_t GetOldTPCchi2perNDF() const {
+    ///
+    /// WARNING: fChi2perNDF=chi2/(nTPCclus-5)
+    ///   from AliAnalysisTaskESDfilter::Chi2perNDF
+    ///   NDF is not correct, to be used only for checks
+    ///
+    return fChi2perNDF;
   }
 
   Int_t GetNcls(Int_t idet) const;
@@ -163,6 +191,7 @@ class AliAODTrack : public AliVTrack {
   
   virtual Double_t Eta() const { return -TMath::Log(TMath::Tan(0.5 * fMomentum[2])); }
 
+  virtual Double_t  GetSign() const { return fCharge > 0 ? 1 : -1; }
   virtual Short_t  Charge() const {return fCharge; }
 
   virtual Bool_t   PropagateToDCA(const AliVVertex *vtx, 
@@ -452,6 +481,13 @@ class AliAODTrack : public AliVTrack {
 
   // Dummy
   Int_t    PdgCode() const {return 0;}
+
+  void     SetTOFchi2(Double_t chi2) { fTOFchi2 = chi2; }
+  Double_t GetTOFchi2() const {return fTOFchi2;};
+  void     SetTOFsignalDz(Double_t dz) { fTOFsignalDz = dz; }
+  Double_t GetTOFsignalDz() const { return fTOFsignalDz; }
+  void     SetTOFsignalDx(Double_t dx) { fTOFsignalDx = dx; }
+  Double_t GetTOFsignalDx() const { return fTOFsignalDx; }
   
  private :
 
@@ -492,6 +528,10 @@ class AliAODTrack : public AliVTrack {
 
   UShort_t      fTPCnclsF;          ///< findable clusters
   UShort_t      fTPCNCrossedRows;   ///< n crossed rows
+
+  Double32_t    fTOFchi2;           //[0,25.6,10] chi2 in the TOF
+  Double32_t    fTOFsignalDx;       //[-10,10,11] local x  of track's impact on the TOF pad [cm]
+  Double32_t    fTOFsignalDz;       //[-10,10,11] local z  of track's impact on the TOF pad [cm]
 
   Short_t       fID;                ///< unique track ID, points back to the ESD track
 
@@ -538,7 +578,7 @@ class AliAODTrack : public AliVTrack {
   Int_t GetNumberOfTPCClusters() const { return GetTPCncls();}  
   Int_t GetNumberOfTRDClusters() const { return GetTRDncls();}  
 
-  ClassDef(AliAODTrack, 27);
+  ClassDef(AliAODTrack, 28);
 };
 
 inline Bool_t  AliAODTrack::IsPrimaryCandidate() const

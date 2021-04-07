@@ -33,6 +33,15 @@
 #include <TROOT.h>
 #include <TCanvas.h>
 #include <TStopwatch.h>
+#include <TObject.h>
+#include <TObjArray.h>
+#include <TObjString.h>
+#include <TString.h>
+#include <TKey.h>
+#include <TCollection.h>
+#include <THashList.h>
+#include <TRegexp.h>
+#include <TFileInfo.h>
 
 #include "AliLog.h"
 #include "AliAnalysisSelector.h"
@@ -45,6 +54,7 @@
 #include "AliSysInfo.h"
 #include "AliAnalysisStatistics.h"
 #include "AliVEvent.h"
+#include "AliDirList.h"
 
 using std::ofstream;
 using std::ios;
@@ -99,6 +109,7 @@ AliAnalysisManager::AliAnalysisManager(const char *name, const char *title)
                     fNcalls(0),
                     fMaxEntries(0),
                     fCacheSize(100000000), // default 100 MB
+                    fNMCevents(0),
                     fStatisticsMsg(),
                     fRequestedBranches(),
                     fStatistics(0),
@@ -173,6 +184,7 @@ AliAnalysisManager::AliAnalysisManager(const AliAnalysisManager& other)
                     fNcalls(other.fNcalls),
                     fMaxEntries(other.fMaxEntries),
                     fCacheSize(other.fCacheSize),
+                    fNMCevents(other.fNMCevents),
                     fStatisticsMsg(other.fStatisticsMsg),
                     fRequestedBranches(other.fRequestedBranches),
                     fStatistics(other.fStatistics),
@@ -244,6 +256,7 @@ AliAnalysisManager& AliAnalysisManager::operator=(const AliAnalysisManager& othe
       fNcalls     = other. fNcalls;
       fMaxEntries = other.fMaxEntries;
       fCacheSize = other.fCacheSize;
+      fNMCevents = other.fNMCevents;
       fStatisticsMsg = other.fStatisticsMsg;
       fRequestedBranches = other.fRequestedBranches;
       fStatistics = other.fStatistics;
@@ -620,8 +633,8 @@ Bool_t AliAnalysisManager::Notify()
    /// user if needed. The return value is currently not used.
 
    fIOTimer->Start(kTRUE); 
+   if (!TObject::TestBit(AliAnalysisManager::kTrueNotify)) return kTRUE;
    if (!fTree) return kFALSE;
-   if (!TObject::TestBit(AliAnalysisManager::kTrueNotify)) return kFALSE;
 
    fTable.Clear("nodelete"); // clearing the hash table may not be needed -> C.L.
    if (fMode == kProofAnalysis) fIsRemote = kTRUE;
@@ -1007,8 +1020,15 @@ void AliAnalysisManager::ImportWrappers(TList *source)
          // Cd to the directory pointed by the container
          TString folder = cont->GetFolderName();
          if (!folder.IsNull()) f->cd(folder);
-         // Try to fetch first an object having the container name.
-         obj = gDirectory->Get(cont->GetName());
+         // Special treatment for a directory list
+         if (cont->IsDirList()) {
+            auto dirlist = AliDirList::CreateFrom(cont->GetName());
+            if (dirlist) dirlist->SetOwner(true);
+            obj = dirlist;
+         }
+         // Try to fetch an object having the container name.
+         if (!obj)
+            obj = gDirectory->Get(cont->GetName());
          if (!obj) {
             Warning("ImportWrappers", "Could not import object of type:%s for container %s in file %s:%s.\n Object will not be available in Terminate(). Try if possible to name the output object as the container (%s) or to embed it in a TList", 
                     cont->GetType()->GetName(), cont->GetName(), filename, cont->GetFolderName(), cont->GetName());
@@ -1193,6 +1213,7 @@ void AliAnalysisManager::Terminate()
          file->cd(dir);
       }  
       if (fDebug > 1) printf("...writing container %s to file %s:%s\n", output->GetName(), file->GetName(), output->GetFolderName());
+      if (output->IsDirList()) (static_cast<AliDirList*>(output->GetData()))->SetName(output->GetName());
       if (output->GetData()->InheritsFrom(TCollection::Class())) {
       // If data is a collection, we set the name of the collection 
       // as the one of the container and we save as a single key.
@@ -1206,8 +1227,8 @@ void AliAnalysisManager::Terminate()
             tree->AutoSave();
          } else {
             output->GetData()->Write();
-         }   
-      }      
+         }
+      }
       if (opwd) opwd->cd();
    }
    gROOT->cd();
@@ -2402,6 +2423,8 @@ void AliAnalysisManager::ExecAnalysis(Option_t *option)
    AliAnalysisTask *task;
    // Reset the analysis
    ResetAnalysis();
+
+   fBreakExecutionChain = false;
    // Check if the top tree is active.
    if (fTree) {
       if (getsysInfo && ((fNcalls%fNSysInfo)==0)) 
@@ -2451,7 +2474,12 @@ void AliAnalysisManager::ExecAnalysis(Option_t *option)
          gROOT->cd();
          if (getsysInfo && ((fNcalls%fNSysInfo)==0)) 
             AliSysInfo::AddStamp(task->ClassName(), fNcalls, itask, 1);
-         itask++;   
+         itask++;
+         if (fBreakExecutionChain) {
+            if (fDebug > 1)
+               cout << "    A break in the task execution chain has been requested by the task: " << task->GetName() << endl;
+            break;
+         }
       }
       fCPUTimer->Stop();
       fCPUTime += fCPUTimer->RealTime();
@@ -2498,6 +2526,11 @@ void AliAnalysisManager::ExecAnalysis(Option_t *option)
       task->ExecuteTask(option);
       if (fStatistics) fStatistics->StopTimer();
       gROOT->cd();
+      if (fBreakExecutionChain) {
+         if (fDebug > 1)
+            cout << "    A break in the task execution chain has been requested by the task: " << task->GetName() << endl;
+         break;
+      }
    }   
    fCPUTimer->Stop();
    fCPUTime += fCPUTimer->RealTime();
@@ -3138,4 +3171,55 @@ void AliAnalysisManager::InitInputData(AliVEvent* esdEvent, AliVfriendEvent* esd
   else {
     Fatal("PropagateHLTEvent", "Input Handler not found, we cannot use this method!");
   }
+}
+
+//______________________________________________________________________________
+/**
+ * Creates a chain from an list of files
+ * Using list of directories is not supported; use find to create a list of files; Ex:
+ * find /alice/data/2016/LHC16r/ -path "_*_/000266189/_*_" -path "_*_/pass1_CENT_wSDD/_*_" -name AliAOD.root -printf "file://%p\n"
+ * NB! on macos you need gfind that is installed with "brew install findutils"
+ * @param filelist Name of the file containing the list of files
+ * @param iNumFiles If iNumFiles > 0 only nfiles files are added
+ * @param iStartWithFile starting from file 'iStartWithFile' (>= 1).
+ * @param cTreeNameArg Tree name for chaining. if "auto" it will be taken as the first tree name from the first file from filelist
+ * @param friends Specify the root_file/friend_tree that is assumed to be in the same directory as the each input file; if friend_tree is not specified we will assume the defaults
+ * @return TChain*
+ */
+TChain* AliAnalysisManager::CreateChain(const char* filelist, const char* cTreeNameArg, Int_t iNumFiles, Int_t iStartWithFile)
+{
+TString sTreeNameArg (cTreeNameArg), treeName;
+
+TFileCollection filecoll ("anachain","File collection for analysis"); // easy manipulation of file collections
+Int_t iAddedFiles = filecoll.AddFromFile(filelist,iNumFiles,iStartWithFile);
+if ( iAddedFiles < 1 ) { std::cout << "NO Files added to collection !!!" << std::endl; return NULL; }
+
+// if cTreeNameArg is auto lets try to autodetect what type of tree we have;
+// the assuption is that all files are the same and the first one is reprezentative
+THashList* list =  filecoll.GetList();
+if ( sTreeNameArg.EqualTo("auto") ) { // if tree name is not specified
+  TRegexp tree_regex ("[aod,esd]Tree");
+  TFileInfo* fileinfo = dynamic_cast<TFileInfo*>(list->At(0)); // get first fileinfo in list
+  TFile file (fileinfo->GetFirstUrl()->GetFile()); // get the actual TFile
+  if (file.IsZombie()) { cout << "Should not reach this message!! Error opening file" << endl; return NULL; }
+
+  // lets parse the TFile
+  TIter next(file.GetListOfKeys());
+  TKey* key = NULL;
+  while (( key = dynamic_cast<TKey*>(next()) )) {
+    TString class_name = key->GetClassName();
+    if ( ! class_name.EqualTo("TTree") ) { continue; } // searching for first TTree
+
+    TString key_name = key->GetName();
+    if ( key_name.Contains(tree_regex) ) { treeName = key_name; break;} // that is named either aodTree or esdTree
+    }
+  file.Close();
+  }
+else
+  { treeName = sTreeNameArg ; } // tree name is specified
+
+TChain* chain = new TChain (treeName.Data(),""); // lets create the chain
+if ( chain->AddFileInfoList(list) == 0 ) { return NULL; } // and add file collection (THashList is a Tlist that is a TCollection)
+
+return chain;
 }

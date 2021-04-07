@@ -30,8 +30,8 @@ AliAODMCParticle::AliAODMCParticle():
 AliVParticle(),
   fPdgCode(0),
   fFlag(0),
-  fLabel(0),
-  fMother(0),
+  fLabel(-1),
+  fMother(-1),
   fPx(0),
   fPy(0),
   fPz(0),
@@ -66,8 +66,8 @@ AliAODMCParticle::AliAODMCParticle(const AliMCParticle* mcpart, Int_t label,Int_
 {
     /// Constructor
 
-  fDaughter[0] =  mcpart->GetFirstDaughter(); 
-  fDaughter[1] =  mcpart->GetLastDaughter();
+  fDaughter[0] =  mcpart->GetDaughterFirst(); 
+  fDaughter[1] =  mcpart->GetDaughterLast();
 }
     
     

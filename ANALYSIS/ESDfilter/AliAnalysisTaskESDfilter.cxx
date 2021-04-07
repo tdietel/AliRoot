@@ -12,7 +12,7 @@
  * about the suitability of this software for any purpose. It is          *
  * provided "as is" without express or implied warranty.                  *
  **************************************************************************/
- 
+
 #include <Riostream.h>
 #include <TChain.h>
 #include <TTree.h>
@@ -67,7 +67,8 @@
 
 using std::cout;
 using std::endl;
-ClassImp(AliAnalysisTaskESDfilter)
+
+ClassImp(AliAnalysisTaskESDfilter);
 
 AliAnalysisTaskESDfilter::AliAnalysisTaskESDfilter():
   AliAnalysisTaskSE(),
@@ -104,7 +105,7 @@ AliAnalysisTaskESDfilter::AliAnalysisTaskESDfilter():
   fIsTZEROEnabled(kTRUE),
   fIsZDCEnabled(kTRUE),
   fIsADEnabled(kTRUE),
-  fIsHMPIDEnabled(kTRUE), 
+  fIsHMPIDEnabled(kTRUE),
   fIsV0CascadeRecoEnabled(kFALSE),
   fAreCascadesEnabled(kTRUE),
   fAreV0sEnabled(kTRUE),
@@ -123,15 +124,19 @@ AliAnalysisTaskESDfilter::AliAnalysisTaskESDfilter():
   fTPCaloneTrackCuts(0),
   fDoPropagateTrackToEMCal(kTRUE),
   fEMCalSurfaceDistance(440),
+  fUseMassForPropToEMCal(0),
+  fUseOuterParamForPropToEMCal(0),
   fRefitVertexTracks(-1),
   fRefitVertexTracksNCuts(0),
   fRefitVertexTracksCuts(0),
+  fRunMVertexerForPileUp(0),
   fIsMuonCaloPass(kFALSE),
   fAddPCMv0s(kFALSE),
   fbitfieldPCMv0sA(NULL),
   fbitfieldPCMv0sB(NULL),
   fv0Histos(NULL),
-  fHistov0List(NULL)
+  fHistov0List(NULL),
+  fkDoSelectiveV0Reset(kFALSE)
 {
   // Default constructor
   fV0Cuts[0] =  33.   ;   // max allowed chi2
@@ -188,7 +193,7 @@ AliAnalysisTaskESDfilter::AliAnalysisTaskESDfilter(const char* name, Bool_t addP
   fIsTZEROEnabled(kTRUE),
   fIsZDCEnabled(kTRUE),
   fIsADEnabled(kTRUE),
-  fIsHMPIDEnabled(kTRUE), 
+  fIsHMPIDEnabled(kTRUE),
   fIsV0CascadeRecoEnabled(kFALSE),
   fAreCascadesEnabled(kTRUE),
   fAreV0sEnabled(kTRUE),
@@ -207,15 +212,19 @@ AliAnalysisTaskESDfilter::AliAnalysisTaskESDfilter(const char* name, Bool_t addP
   fTPCaloneTrackCuts(0),
   fDoPropagateTrackToEMCal(kTRUE),
   fEMCalSurfaceDistance(440),
+  fUseMassForPropToEMCal(0),
+  fUseOuterParamForPropToEMCal(0),
   fRefitVertexTracks(-1),
   fRefitVertexTracksNCuts(0),
   fRefitVertexTracksCuts(0),
+  fRunMVertexerForPileUp(0),
   fIsMuonCaloPass(kFALSE),
   fAddPCMv0s(addPCMv0s),
   fbitfieldPCMv0sA(NULL),
   fbitfieldPCMv0sB(NULL),
   fv0Histos(NULL),
-  fHistov0List(NULL)
+  fHistov0List(NULL),
+  fkDoSelectiveV0Reset(kFALSE)
 {
   /// Constructor
 
@@ -299,7 +308,7 @@ Bool_t AliAnalysisTaskESDfilter::Notify()
 
   AddMetadataToUserInfo();
   return kTRUE;
-}   
+}
 
 //______________________________________________________________________________
 Bool_t AliAnalysisTaskESDfilter::AddMetadataToUserInfo()
@@ -312,11 +321,11 @@ Bool_t AliAnalysisTaskESDfilter::AddMetadataToUserInfo()
     if (!mgr) {
       AliError("AliAnalysisTaskESDfilter::AddMetadataToUserInfo() : No analysis manager !");
       return kFALSE;
-    }   
+    }
     TTree *esdTree = mgr->GetTree()->GetTree();
     if (!esdTree) return kFALSE;
     TNamed *alirootVersion = (TNamed*)esdTree->GetUserInfo()->FindObject("alirootVersion");
-    if (!alirootVersion) return kFALSE;    
+    if (!alirootVersion) return kFALSE;
     AliAODHandler *aodHandler = dynamic_cast<AliAODHandler*>(mgr->GetOutputEventHandler());
     if (!aodHandler) return kFALSE;
     TTree *aodTree = aodHandler->GetTree();
@@ -333,11 +342,11 @@ void AliAnalysisTaskESDfilter::PrintTask(Option_t *option, Int_t indent) const
   /// Print selection task information
 
   AliInfo("");
-  
+
   AliAnalysisTaskSE::PrintTask(option,indent);
-  
+
   TString spaces(' ',indent+3);
-  
+
   cout << spaces.Data() << Form("Cascades       are %s",fAreCascadesEnabled ? "ENABLED":"DISABLED") << endl;
   cout << spaces.Data() << Form("V0s            are %s",fAreV0sEnabled ? "ENABLED":"DISABLED") << endl;
   cout << spaces.Data() << Form("Kinks          are %s",fAreKinksEnabled ? "ENABLED":"DISABLED") << endl;
@@ -347,7 +356,7 @@ void AliAnalysisTaskESDfilter::PrintTask(Option_t *option, Int_t indent) const
   cout << spaces.Data() << Form("EMCAL cells    are %s",fAreEMCALCellsEnabled ? "ENABLED":"DISABLED") << endl;
   cout << spaces.Data() << Form("EMCAL triggers are %s",fAreEMCALTriggerEnabled ? "ENABLED":"DISABLED") << endl;
   cout << spaces.Data() << Form("PHOS triggers  are %s",fArePHOSTriggerEnabled ? "ENABLED":"DISABLED") << endl;
-  cout << spaces.Data() << Form("Tracklets      are %s",fAreTrackletsEnabled ? "ENABLED":"DISABLED") << endl;  
+  cout << spaces.Data() << Form("Tracklets      are %s",fAreTrackletsEnabled ? "ENABLED":"DISABLED") << endl;
   cout << spaces.Data() << Form("HMPID          is  %s",fIsHMPIDEnabled ? "ENABLED":"DISABLED") << endl;
   cout << spaces.Data() << Form("TRD            is  %s",fIsTRDEnabled ? "ENABLED":"DISABLED") << endl;
   cout << spaces.Data() << Form("PropagateTrackToEMCal  is %s", fDoPropagateTrackToEMCal ? "ENABLED":"DISABLED") << endl;
@@ -367,12 +376,12 @@ void AliAnalysisTaskESDfilter::UserExec(Option_t */*option*/)
     if (!fPtshape) AliInfo("detector PID signals are not stored below the pt threshold");
   }
   // Filters must explicitely enable AOD filling in their UserExec (AG)
-  if (!AliAnalysisManager::GetAnalysisManager()->GetOutputEventHandler()) 
+  if (!AliAnalysisManager::GetAnalysisManager()->GetOutputEventHandler())
     AliFatal("Cannot run ESD filter without an output event handler");
   if(fEnableFillAOD) {
     AliAnalysisManager::GetAnalysisManager()->GetOutputEventHandler()->SetFillAOD(kTRUE);
     AliAnalysisManager::GetAnalysisManager()->GetOutputEventHandler()->SetFillExtension(kTRUE);
-  }   
+  }
   ConvertESDtoAOD();
   if(fAddPCMv0s) PostData(1,fHistov0List);
 }
@@ -402,6 +411,12 @@ TClonesArray& AliAnalysisTaskESDfilter::Vertices()
 }
 
 //______________________________________________________________________________
+TClonesArray& AliAnalysisTaskESDfilter::Kinks()
+{
+  return *(AODEvent()->GetKinks());
+}
+
+//______________________________________________________________________________
 AliAODHeader* AliAnalysisTaskESDfilter::ConvertHeader(const AliESDEvent& esd)
 {
   /// Convert header information
@@ -409,27 +424,28 @@ AliAODHeader* AliAnalysisTaskESDfilter::ConvertHeader(const AliESDEvent& esd)
   AliCodeTimerAuto("",0);
   AliAODHeader* header = dynamic_cast<AliAODHeader*>(AODEvent()->GetHeader());
   if(!header) AliFatal("Not a standard AOD");
-  
+
   header->SetRunNumber(esd.GetRunNumber());
   header->SetOfflineTrigger(fInputHandler->IsEventSelected()); // propagate the decision of the physics selection
   header->SetNumberOfESDTracks(esd.GetNumberOfTracks());
   header->SetDAQAttributes(esd.GetDAQAttributes());
   header->SetNumberOfTPCClusters(esd.GetNumberOfTPCClusters());
   header->SetNumberOfTPCTracks(esd.GetNumberOfTPCTracks());
-  
+  header->SetTPCTrackBeforeClean(esd.GetNTPCTrackBeforeClean());
+
   TTree* tree = fInputHandler->GetTree();
   if (tree) {
     TFile* file = tree->GetCurrentFile();
     if (file) header->SetESDFileName(file->GetName());
   }
-  
+
   if (fOldESDformat) {
     header->SetBunchCrossNumber(0);
     header->SetOrbitNumber(0);
     header->SetPeriodNumber(0);
     header->SetEventType(0);
     header->SetMuonMagFieldScale(-999.);
-    header->SetCentrality(0);       
+    header->SetCentrality(0);
     header->SetEventplane(0);
   } else {
     header->SetBunchCrossNumber(esd.GetBunchCrossNumber());
@@ -437,7 +453,7 @@ AliAODHeader* AliAnalysisTaskESDfilter::ConvertHeader(const AliESDEvent& esd)
     header->SetPeriodNumber(esd.GetPeriodNumber());
     header->SetEventType(esd.GetEventType());
     header->SetTimeStamp(esd.GetTimeStamp());
-    
+
     header->SetEventNumberESDFile(esd.GetHeader()->GetEventNumberInFile());
     if(const_cast<AliESDEvent&>(esd).GetCentrality()){
       header->SetCentrality(const_cast<AliESDEvent&>(esd).GetCentrality());
@@ -452,16 +468,16 @@ AliAODHeader* AliAnalysisTaskESDfilter::ConvertHeader(const AliESDEvent& esd)
       header->SetEventplane(0);
     }
   }
-  
+
   // Trigger
   header->SetFiredTriggerClasses(esd.GetFiredTriggerClasses());
-  header->SetTriggerMask(esd.GetTriggerMask()); 
-  header->SetTriggerMaskNext50(esd.GetTriggerMaskNext50()); 
+  header->SetTriggerMask(esd.GetTriggerMask());
+  header->SetTriggerMaskNext50(esd.GetTriggerMaskNext50());
   header->SetTriggerCluster(esd.GetTriggerCluster());
-  header->SetL0TriggerInputs(esd.GetHeader()->GetL0TriggerInputs());    
-  header->SetL1TriggerInputs(esd.GetHeader()->GetL1TriggerInputs());    
-  header->SetL2TriggerInputs(esd.GetHeader()->GetL2TriggerInputs());    
-  
+  header->SetL0TriggerInputs(esd.GetHeader()->GetL0TriggerInputs());
+  header->SetL1TriggerInputs(esd.GetHeader()->GetL1TriggerInputs());
+  header->SetL2TriggerInputs(esd.GetHeader()->GetL2TriggerInputs());
+
   header->SetMagneticField(esd.GetMagneticField());
   header->SetMuonMagFieldScale(esd.GetCurrentDip()/6000.);
   header->SetZDCN1Energy(esd.GetZDCN1Energy());
@@ -475,11 +491,11 @@ AliAODHeader* AliAnalysisTaskESDfilter::ConvertHeader(const AliESDEvent& esd)
 
   // Detector status
   header->SetDetectorStatusMask(esd.GetDetectorStatus());
-  
+
   // ITS Cluster Multiplicty
   const AliMultiplicity *mult = esd.GetMultiplicity();
   for (Int_t ilay = 0; ilay < 6; ilay++) header->SetITSClusters(ilay, mult->GetNumberOfITSClusters(ilay));
-  
+
   // TPC only Reference Multiplicty
   Int_t refMult  = fTPCaloneTrackCuts ? (Short_t)fTPCaloneTrackCuts->GetReferenceMultiplicity(&esd, kTRUE) : -1;
   header->SetTPConlyRefMultiplicity(refMult);
@@ -490,15 +506,15 @@ AliAODHeader* AliAnalysisTaskESDfilter::ConvertHeader(const AliESDEvent& esd)
   header->SetRefMultiplicityComb10(AliESDtrackCuts::GetReferenceMultiplicity(&esd,estType,1.0));
   //
   Float_t diamxy[2]={(Float_t)esd.GetDiamondX(),(Float_t)esd.GetDiamondY()};
-  Float_t diamcov[3]; 
+  Float_t diamcov[3];
   esd.GetDiamondCovXY(diamcov);
   header->SetDiamond(diamxy,diamcov);
   header->SetDiamondZ(esd.GetDiamondZ(),esd.GetSigma2DiamondZ());
-  
-  // VZERO channel equalization factors for event-plane reconstruction 	 
+
+  // VZERO channel equalization factors for event-plane reconstruction
   header->SetVZEROEqFactors(esd.GetVZEROEqFactors());
 
-  // T0 Resolution information                                                                                                                                          
+  // T0 Resolution information
   const AliESDRun* esdRun = esd.GetESDRun();
   for (Int_t i=0;i<AliESDRun::kT0spreadSize;i++) header->SetT0spread(i,esdRun->GetT0spread(i));
 
@@ -506,17 +522,21 @@ AliAODHeader* AliAnalysisTaskESDfilter::ConvertHeader(const AliESDEvent& esd)
 }
 
 //______________________________________________________________________________
-void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd) 
+void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
 {
   /// Convert the cascades part of the ESD.
   /// Return the number of cascades
 
   AliCodeTimerAuto("",0);
-  
+
   // Create vertices starting from the most complex objects
   Double_t chi2 = 0.;
-  
+
   const AliESDVertex* vtx = esd.GetPrimaryVertex();
+  Float_t lPVpos[3];
+  lPVpos[0]=vtx->GetX();
+  lPVpos[1]=vtx->GetY();
+  lPVpos[2]=vtx->GetZ();
   Double_t pos[3] = { 0. };
   Double_t covVtx[6] = { 0. };
   Double_t momBach[3]={0.};
@@ -535,27 +555,27 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
   TClonesArray& verticesArray = Vertices();
   TClonesArray& tracksArray = Tracks();
   TClonesArray& cascadesArray = Cascades();
-  
+
   // Cascades (Modified by A.Maire - February 2009)
   for (Int_t nCascade = 0; nCascade < esd.GetNumberOfCascades(); ++nCascade) {
-    
+
     // 0- Preparation
     //
     AliESDcascade *esdCascade = esd.GetCascade(nCascade);
 		Int_t  idxPosFromV0Dghter  = esdCascade->GetPindex();
 		Int_t  idxNegFromV0Dghter  = esdCascade->GetNindex();
 		Int_t  idxBachFromCascade  = esdCascade->GetBindex();
-    
+
     AliESDtrack  *esdCascadePos  = esd.GetTrack( idxPosFromV0Dghter);
     AliESDtrack  *esdCascadeNeg  = esd.GetTrack( idxNegFromV0Dghter);
     AliESDtrack  *esdCascadeBach = esd.GetTrack( idxBachFromCascade);
-    
+
     // Identification of the V0 within the esdCascade (via both daughter track indices)
     AliESDv0 * currentV0   = 0x0;
     Int_t      idxV0FromCascade = -1;
-    
+
     for (Int_t iV0=0; iV0<esd.GetNumberOfV0s(); ++iV0) {
-      
+
       currentV0 = esd.GetV0(iV0);
 
       // Fix added on 2018-09-18 (ALIROOT-7980)
@@ -564,22 +584,22 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
 
       Int_t posCurrentV0 = currentV0->GetPindex();
       Int_t negCurrentV0 = currentV0->GetNindex();
-      
+
       if (posCurrentV0==idxPosFromV0Dghter && negCurrentV0==idxNegFromV0Dghter) {
         idxV0FromCascade = iV0;
         break;
       }
     }
-    
+
     if(idxV0FromCascade < 0){
       printf("Cascade - no matching for the V0 (index V0 = -1) ! Skip ... \n");
       continue;
     }// a priori, useless check, but safer ... in case of pb with tracks "out of bounds"
-    
+
     AliESDv0 *esdV0FromCascade   = esd.GetV0(idxV0FromCascade);
-        
-    // 1 - Cascade selection 
-    
+
+    // 1 - Cascade selection
+
     //	AliESDVertex *esdPrimVtx = new AliESDVertex(*(esd.GetPrimaryVertex()));
     // 	TList cascadeObjects;
     // 	cascadeObjects.AddAt(esdV0FromCascade, 0);
@@ -588,37 +608,37 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
     // 	cascadeObjects.AddAt(esdCascade,       3);
     // 	cascadeObjects.AddAt(esdCascadeBach,   4);
     // 	cascadeObjects.AddAt(esdPrimVtx,       5);
-    // 
+    //
     // 	UInt_t selectCascade = 0;
     // 	if (fCascadeFilter) {
-    // 	  // selectCascade = fCascadeFilter->IsSelected(&cascadeObjects); 
+    // 	  // selectCascade = fCascadeFilter->IsSelected(&cascadeObjects);
     // 	  	// FIXME AliESDCascadeCuts to be implemented ...
-    // 
-    // 		// Here we may encounter a moot point at the V0 level 
+    //
+    // 		// Here we may encounter a moot point at the V0 level
     // 		// between the cascade selections and the V0 ones :
-    // 		// the V0 selected along with the cascade (secondary V0) may 
+    // 		// the V0 selected along with the cascade (secondary V0) may
     // 		// usually be removed from the dedicated V0 selections (prim V0) ...
     // 		// -> To be discussed !
-    // 
-    // 	  // this is a little awkward but otherwise the 
-    // 	  // list wants to access the pointer (delete it) 
+    //
+    // 	  // this is a little awkward but otherwise the
+    // 	  // list wants to access the pointer (delete it)
     // 	  // again when going out of scope
     // 	  delete cascadeObjects.RemoveAt(5); // esdPrimVtx created via copy construct
     // 	  esdPrimVtx = 0;
-    // 	  if (!selectCascade) 
+    // 	  if (!selectCascade)
     // 	    continue;
     // 	}
     // 	else{
     // 	  delete cascadeObjects.RemoveAt(5); // esdPrimVtx created via copy construct
     // 	  esdPrimVtx = 0;
     // 	}
-    
+
     // 2 - Add the cascade vertex
-    
+
     esdCascade->GetXYZcascade(pos[0], pos[1], pos[2]);
     esdCascade->GetPosCovXi(covVtx);
-    chi2 = esdCascade->GetChi2Xi(); 
-    
+    chi2 = esdCascade->GetChi2Xi();
+
     AliAODVertex *vCascade = new(verticesArray[fNumberOfVertices++]) AliAODVertex(pos,
 										  covVtx,
 										  chi2, // FIXME = Chi2/NDF will be needed
@@ -626,11 +646,11 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
 										  nCascade, // id
 										  AliAODVertex::kCascade);
     fPrimaryVertex->AddDaughter(vCascade);
-    
+
     // 3 - Add the bachelor track from the cascade
-    
+
     if (!fUsedTrack[idxBachFromCascade]) {
-      
+
       esdCascadeBach->GetPxPyPz(momBach);
       esdCascadeBach->GetXYZ(pos);
       esdCascadeBach->GetCovarianceXYZPxPyPz(covTr);
@@ -642,14 +662,14 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
       if (fTrackFilter) selectInfo = fTrackFilter->IsSelected(esdCascadeBach);
       if (fMChandler) fMChandler->SelectParticle(esdCascadeBach->GetLabel());
       aodTrack = new(tracksArray[fNumberOfTracks++]) AliAODTrack(esdCascadeBach->GetID(),
-								 esdCascadeBach->GetLabel(), 
-								 momBach, 
+								 esdCascadeBach->GetLabel(),
+								 momBach,
 								 kTRUE,
 								 pos,
 								 kFALSE, // Why kFALSE for "isDCA" ? FIXME
-								 covTr, 
+								 covTr,
 								 (Short_t)esdCascadeBach->GetSign(),
-								 esdCascadeBach->GetITSClusterMap(), 
+								 esdCascadeBach->GetITSClusterMap(),
 								 // pid,
 								 vCascade,
 								 kTRUE,  // usedForVtxFit = kFALSE ? FIXME
@@ -657,7 +677,7 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
 								 AliAODTrack::kFromDecayVtx,
 								 selectInfo);
       aodTrack->SetITSSharedMap(esdCascadeBach->GetITSSharedMap());
-      aodTrack->SetITSchi2(esdCascadeBach->GetITSchi2());      
+      aodTrack->SetITSchi2(esdCascadeBach->GetITSchi2());
       aodTrack->SetPIDForTracking(esdCascadeBach->GetPIDForTracking());
       aodTrack->SetTPCFitMap(esdCascadeBach->GetTPCFitMap());
       aodTrack->SetTPCClusterMap(esdCascadeBach->GetTPCClusterMap());
@@ -667,10 +687,10 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
       aodTrack->SetTPCNCrossedRows(UShort_t(esdCascadeBach->GetTPCCrossedRows()));
       aodTrack->SetIntegratedLength(esdCascadeBach->GetIntegratedLength());
       aodTrack->SetTOFLabel(tofLabel);
-      CopyChi2TPCConstrainedVsGlobal(esdCascadeBach, aodTrack);      
+      CopyChi2TPCConstrainedVsGlobal(esdCascadeBach, aodTrack);
       CopyCaloProps(esdCascadeBach,aodTrack);
       fAODTrackRefs->AddAt(aodTrack,idxBachFromCascade);
-	    
+
       if (esdCascadeBach->GetSign() > 0) ++fNumberOfPositiveTracks;
       aodTrack->ConvertAliPIDtoAODPID();
       aodTrack->SetFlags(esdCascadeBach->GetStatus());
@@ -679,21 +699,21 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
     else {
       aodTrack = static_cast<AliAODTrack*>( fAODTrackRefs->At(idxBachFromCascade) );
     }
-    
+
     vCascade->AddDaughter(aodTrack);
-    
-    // 4 - Add the V0 from the cascade. 
+
+    // 4 - Add the V0 from the cascade.
     // = V0vtx + both pos and neg daughter tracks + the aodV0 itself
     //
-    
+
     if ( !fUsedV0[idxV0FromCascade] ) {
       // 4.A - if VO structure hasn't been created yet
-      
+
       // 4.A.1 - Create the V0 vertex of the cascade
       esdV0FromCascade->GetXYZ(pos[0], pos[1], pos[2]);
       esdV0FromCascade->GetPosCov(covVtx);
       chi2 = esdV0FromCascade->GetChi2V0();  // = chi2/NDF since NDF = 2*2-3 ?
-			
+
       vV0FromCascade = new(verticesArray[fNumberOfVertices++]) AliAODVertex(pos,
 									    covVtx,
 									    chi2,
@@ -707,33 +727,33 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
       // Setting the parent vtx (here = param "vCascade") doesn't lead to a crash
       // but to a problem of consistency within AODEvent.
       // -> See below paragraph 4.B, for the proposed treatment of such a case.
-      
+
       // Add the vV0FromCascade to the aodVOVtxRefs
       fAODV0VtxRefs->AddAt(vV0FromCascade,idxV0FromCascade);
-      
+
       // 4.A.2 - Add the positive tracks from the V0
-      
+
       esdCascadePos->GetPxPyPz(momPos);
       esdCascadePos->GetXYZ(pos);
       esdCascadePos->GetCovarianceXYZPxPyPz(covTr);
       //      esdCascadePos->GetESDpid(pid);
-      esdCascadePos->GetTOFLabel(tofLabel);      
-      
+      esdCascadePos->GetTOFLabel(tofLabel);
+
       if (!fUsedTrack[idxPosFromV0Dghter]) {
         fUsedTrack[idxPosFromV0Dghter] = kTRUE;
-        
+
         UInt_t selectInfo = 0;
         if (fTrackFilter) selectInfo = fTrackFilter->IsSelected(esdCascadePos);
         if(fMChandler) fMChandler->SelectParticle(esdCascadePos->GetLabel());
         aodTrack = new(tracksArray[fNumberOfTracks++]) AliAODTrack(esdCascadePos->GetID(),
-								   esdCascadePos->GetLabel(), 
-								   momPos, 
+								   esdCascadePos->GetLabel(),
+								   momPos,
 								   kTRUE,
 								   pos,
 								   kFALSE, // Why kFALSE for "isDCA" ? FIXME
-								   covTr, 
+								   covTr,
 								   (Short_t)esdCascadePos->GetSign(),
-								   esdCascadePos->GetITSClusterMap(), 
+								   esdCascadePos->GetITSClusterMap(),
 								   //pid,
 								   vV0FromCascade,
 								   kTRUE,  // usedForVtxFit = kFALSE ? FIXME
@@ -741,7 +761,7 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
 								   AliAODTrack::kFromDecayVtx,
 								   selectInfo);
 	aodTrack->SetITSSharedMap(esdCascadePos->GetITSSharedMap());
-	aodTrack->SetITSchi2(esdCascadePos->GetITSchi2());      
+	aodTrack->SetITSchi2(esdCascadePos->GetITSchi2());
 	aodTrack->SetPIDForTracking(esdCascadePos->GetPIDForTracking());
         aodTrack->SetTPCFitMap(esdCascadePos->GetTPCFitMap());
         aodTrack->SetTPCClusterMap(esdCascadePos->GetTPCClusterMap());
@@ -754,7 +774,7 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
 	CopyChi2TPCConstrainedVsGlobal(esdCascadePos, aodTrack);
 	CopyCaloProps(esdCascadePos,aodTrack);
         fAODTrackRefs->AddAt(aodTrack,idxPosFromV0Dghter);
-        
+
         if (esdCascadePos->GetSign() > 0) ++fNumberOfPositiveTracks;
         aodTrack->ConvertAliPIDtoAODPID();
         aodTrack->SetFlags(esdCascadePos->GetStatus());
@@ -764,21 +784,21 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
         aodTrack = static_cast<AliAODTrack*>(fAODTrackRefs->At(idxPosFromV0Dghter));
       }
       vV0FromCascade->AddDaughter(aodTrack);
-      
+
       // 4.A.3 - Add the negative tracks from the V0
-      
+
       esdCascadeNeg->GetPxPyPz(momNeg);
       esdCascadeNeg->GetXYZ(pos);
       esdCascadeNeg->GetCovarianceXYZPxPyPz(covTr);
       //   esdCascadeNeg->GetESDpid(pid);
       esdCascadeNeg->GetTOFLabel(tofLabel);
-      
+
       if (!fUsedTrack[idxNegFromV0Dghter]) {
         fUsedTrack[idxNegFromV0Dghter] = kTRUE;
-        
+
         UInt_t selectInfo = 0;
         if (fTrackFilter) selectInfo = fTrackFilter->IsSelected(esdCascadeNeg);
-        if (fMChandler) 
+        if (fMChandler)
 	  fMChandler->SelectParticle(esdCascadeNeg->GetLabel());
         aodTrack = new(tracksArray[fNumberOfTracks++]) AliAODTrack(esdCascadeNeg->GetID(),
 								   esdCascadeNeg->GetLabel(),
@@ -786,9 +806,9 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
 								   kTRUE,
 								   pos,
 								   kFALSE, // Why kFALSE for "isDCA" ? FIXME
-								   covTr, 
+								   covTr,
 								   (Short_t)esdCascadeNeg->GetSign(),
-								   esdCascadeNeg->GetITSClusterMap(), 
+								   esdCascadeNeg->GetITSClusterMap(),
 								   // pid,
 								   vV0FromCascade,
 								   kTRUE,  // usedForVtxFit = kFALSE ? FIXME
@@ -796,7 +816,7 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
 								   AliAODTrack::kFromDecayVtx,
 								   selectInfo);
 	aodTrack->SetITSSharedMap(esdCascadeNeg->GetITSSharedMap());
-	aodTrack->SetITSchi2(esdCascadeNeg->GetITSchi2());      
+	aodTrack->SetITSchi2(esdCascadeNeg->GetITSchi2());
 	aodTrack->SetPIDForTracking(esdCascadeNeg->GetPIDForTracking());
         aodTrack->SetTPCFitMap(esdCascadeNeg->GetTPCFitMap());
         aodTrack->SetTPCClusterMap(esdCascadeNeg->GetTPCClusterMap());
@@ -806,10 +826,10 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
 	aodTrack->SetTPCNCrossedRows(UShort_t(esdCascadeNeg->GetTPCCrossedRows()));
 	aodTrack->SetIntegratedLength(esdCascadeNeg->GetIntegratedLength());
 	aodTrack->SetTOFLabel(tofLabel);
-	CopyChi2TPCConstrainedVsGlobal(esdCascadeNeg, aodTrack);      
+	CopyChi2TPCConstrainedVsGlobal(esdCascadeNeg, aodTrack);
 	CopyCaloProps(esdCascadeNeg,aodTrack);
         fAODTrackRefs->AddAt(aodTrack,idxNegFromV0Dghter);
-        
+
         if (esdCascadeNeg->GetSign() > 0) ++fNumberOfPositiveTracks;
         aodTrack->ConvertAliPIDtoAODPID();
         aodTrack->SetFlags(esdCascadeNeg->GetStatus());
@@ -818,18 +838,18 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
       else {
         aodTrack = static_cast<AliAODTrack*>(fAODTrackRefs->At(idxNegFromV0Dghter));
       }
-      
+
       vV0FromCascade->AddDaughter(aodTrack);
-			
+
       // 4.A.4 - Add the V0 from cascade to the V0 array
-      
+
       Double_t  dcaV0Daughters      = esdV0FromCascade->GetDcaV0Daughters();
       Double_t  dcaV0ToPrimVertex   = esdV0FromCascade->GetD(esd.GetPrimaryVertex()->GetX(),
                                                              esd.GetPrimaryVertex()->GetY(),
                                                              esd.GetPrimaryVertex()->GetZ() );
-      esdV0FromCascade->GetPPxPyPz( momPosAtV0vtx[0],momPosAtV0vtx[1],momPosAtV0vtx[2] ); 
-      esdV0FromCascade->GetNPxPyPz( momNegAtV0vtx[0],momNegAtV0vtx[1],momNegAtV0vtx[2] ); 
-      
+      esdV0FromCascade->GetPPxPyPz( momPosAtV0vtx[0],momPosAtV0vtx[1],momPosAtV0vtx[2] );
+      esdV0FromCascade->GetNPxPyPz( momNegAtV0vtx[0],momNegAtV0vtx[1],momNegAtV0vtx[2] );
+
       Double_t dcaDaughterToPrimVertex[2] = { 999., 999.}; // ..[0] = DCA in (x,y) for Pos and ..[1] = Neg
       dcaDaughterToPrimVertex[0] = TMath::Abs(esdCascadePos->GetD(esd.GetPrimaryVertex()->GetX(),
                                                                   esd.GetPrimaryVertex()->GetY(),
@@ -837,58 +857,66 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
       dcaDaughterToPrimVertex[1] = TMath::Abs(esdCascadeNeg->GetD(esd.GetPrimaryVertex()->GetX(),
                                                                   esd.GetPrimaryVertex()->GetY(),
                                                                   esd.GetMagneticField())        );
-      
-      aodV0 = new(V0s()[fNumberOfV0s++]) AliAODv0(vV0FromCascade, 
+
+      aodV0 = new(V0s()[fNumberOfV0s++]) AliAODv0(vV0FromCascade,
                                                   dcaV0Daughters,
-                                                  dcaV0ToPrimVertex, 
-                                                  momPosAtV0vtx, 
-                                                  momNegAtV0vtx, 
-                                                  dcaDaughterToPrimVertex); 
+                                                  dcaV0ToPrimVertex,
+                                                  momPosAtV0vtx,
+                                                  momNegAtV0vtx,
+                                                  dcaDaughterToPrimVertex);
       // set the aod v0 on-the-fly status
       aodV0->SetOnFlyStatus(esdV0FromCascade->GetOnFlyStatus());
-      
+
       // Add the aodV0 to the aodVORefs
       fAODV0Refs->AddAt(aodV0,idxV0FromCascade);
-      
+
       fUsedV0[idxV0FromCascade] = kTRUE;
-      
-    } else { 
+
+    } else {
       // 4.B - if V0 structure already used
-      
+
       // Note :
-      //    one V0 can be used by several cascades (frequent in PbPb evts) : 
+      //    one V0 can be used by several cascades (frequent in PbPb evts) :
       // same V0 which used but attached to different bachelor tracks
       // -> aodVORefs and fAODV0VtxRefs are needed.
       // Goal : avoid a redundancy of the info in "Vertices" and "v0s" clones array.
-      
+
       vV0FromCascade = static_cast<AliAODVertex*>(fAODV0VtxRefs->At(idxV0FromCascade));
       aodV0          = static_cast<AliAODv0*>    (fAODV0Refs   ->At(idxV0FromCascade));
-      
+
       // - Treatment of the parent for such a "re-used" V0 :
       // Insert the cascade that reuses the V0 vertex in the lineage chain
       // Before : vV0 -> vCascade1 -> vPrimary
       //  - Hyp : cascade2 uses the same V0 as cascade1
       //  After :  vV0 -> vCascade2 -> vCascade1 -> vPrimary
-      
+
       AliAODVertex *vCascadePreviousParent = static_cast<AliAODVertex*> (vV0FromCascade->GetParent());
       vV0FromCascade->SetParent(vCascade);
       vCascade      ->SetParent(vCascadePreviousParent);
-      
+
     }// end if V0 structure already used
-    
+
     // In any case (used V0 or not), add the V0 vertex to the cascade one.
-    vCascade->AddDaughter(vV0FromCascade);	
-		
+    vCascade->AddDaughter(vV0FromCascade);
+
     // 5 - Add the primary track of the cascade (if any)
-    
+
     // 6 - Add the cascade to the AOD array of cascades
     Double_t dcaBachToPrimVertexXY = TMath::Abs(esdCascadeBach->GetD(esd.GetPrimaryVertex()->GetX(),
                                                                      esd.GetPrimaryVertex()->GetY(),
                                                                      esd.GetMagneticField())        );
-    
+
     Double_t momBachAtCascadeVtx[3]={0.};
 
     esdCascade->GetBPxPyPz(momBachAtCascadeVtx[0], momBachAtCascadeVtx[1], momBachAtCascadeVtx[2]);
+
+    //Add background rejection variable needed for cascades in Pb-Pb
+    Double_t lBachBaryonCosPA = 0;
+    if(esdCascade->Charge()<0.){
+      lBachBaryonCosPA = GetCosPA(esdCascadePos,esdCascadeBach,esd.GetMagneticField(), lPVpos);
+    }else{
+      lBachBaryonCosPA = GetCosPA(esdCascadeNeg,esdCascadeBach,esd.GetMagneticField(), lPVpos);
+    }
     
     aodCascade = new(cascadesArray[fNumberOfCascades++]) AliAODcascade(vCascade,
 								       esdCascade->Charge(),
@@ -899,15 +927,16 @@ void AliAnalysisTaskESDfilter::ConvertCascades(const AliESDEvent& esd)
 								       // See AODcascade::DcaXiToPrimVertex(Double, Double, Double)
 								       dcaBachToPrimVertexXY,
 								       momBachAtCascadeVtx,
-								       *aodV0);
+								       *aodV0,
+                       lBachBaryonCosPA);
     aodCascade->SetBit(AliAODcascade::kOnFlyCascadesFixed);
     if (fDebug > 10) {
       printf("---- Cascade / AOD cascade : \n\n");
       aodCascade->PrintXi(fPrimaryVertex->GetX(), fPrimaryVertex->GetY(), fPrimaryVertex->GetZ());
     }
-    
+
   } // end of the loop on cascades
-  
+
   Cascades().Expand(fNumberOfCascades);
 }
 
@@ -921,7 +950,7 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
   //
   // V0s
   //
-  Double_t pos[3] = { 0. };      
+  Double_t pos[3] = { 0. };
   Double_t chi2(0.0);
   Double_t covVtx[6] = { 0. };
   Double_t momPos[3]={0.};
@@ -939,10 +968,10 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
     fbitfieldPCMv0sB = (TBits*) GetInputData(2);
   }
   UInt_t posInt;
-  
-  for (Int_t nV0 = 0; nV0 < esd.GetNumberOfV0s(); ++nV0) {
+
+  for (Int_t nV0 = 0; nV0 < esd.GetNumberOfV0s(); ++nV0)  {
     if (fAddPCMv0s) {posInt = (UInt_t) nV0;}
-    if (fUsedV0[nV0]){
+    if (fUsedV0[nV0]) {
 	if(fbitfieldPCMv0sA){
 	  if(fbitfieldPCMv0sA->TestBitNumber(posInt) && posInt <= fbitfieldPCMv0sA->GetNbits()){
 	    fv0Histos->Fill(5);
@@ -957,12 +986,12 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
 	}
       continue; // skip if already added to the AOD
     }
-    
+
     AliESDv0 *v0 = esd.GetV0(nV0);
     Int_t posFromV0 = v0->GetPindex();
     Int_t negFromV0 = v0->GetNindex();
-    
-    // V0 selection 
+
+    // V0 selection
     //
     AliESDVertex *esdVtx   = new AliESDVertex(*(esd.GetPrimaryVertex()));
     AliESDtrack  *esdV0Pos = esd.GetTrack(posFromV0);
@@ -973,15 +1002,15 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
     v0objects.AddAt(esdV0Neg,                2);
     v0objects.AddAt(esdVtx,                  3);
     UInt_t selectV0 = 0;
-    
+
     //Add PCM V0s
-    if(fbitfieldPCMv0sA){
+    if(fbitfieldPCMv0sA) {
       if(fbitfieldPCMv0sA->TestBitNumber(posInt) && posInt <= fbitfieldPCMv0sA->GetNbits()){
 	selectV0 = 2;
 	fv0Histos->Fill(1);
       }
     }
-    if(fbitfieldPCMv0sB){
+    if(fbitfieldPCMv0sB) {
       if(fbitfieldPCMv0sB->TestBitNumber(posInt) && posInt <= fbitfieldPCMv0sB->GetNbits()){
 	selectV0 = 2;
 	fv0Histos->Fill(2);
@@ -989,18 +1018,18 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
     }
     if (fV0Filter) {
       selectV0 |= fV0Filter->IsSelected(&v0objects);
-      // this is a little awkward but otherwise the 
-      // list wants to access the pointer (delete it) 
+      // this is a little awkward but otherwise the
+      // list wants to access the pointer (delete it)
       // again when going out of scope
       delete v0objects.RemoveAt(3); // esdVtx created via copy construct
       esdVtx = 0;
-      if (!selectV0) 
+      if (!selectV0)
         continue;
     } else {
       delete v0objects.RemoveAt(3); // esdVtx created via copy construct
       esdVtx = 0;
     }
-    
+
       if (fbitfieldPCMv0sA){
 	if (selectV0==3 && fbitfieldPCMv0sA->TestBitNumber(posInt)){
 	  fv0Histos->Fill(3);
@@ -1017,9 +1046,9 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
 	  fv0Histos->Fill(8);
 	}
       }
-    
+
     v0->GetXYZ(pos[0], pos[1], pos[2]);
-    
+
     if (!fOldESDformat) {
 	    chi2 = v0->GetChi2V0(); // = chi2/NDF since NDF = 2*2-3
 	    v0->GetPosCov(covVtx);
@@ -1027,9 +1056,9 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
 	    chi2 = -999.;
 	    for (Int_t i = 0; i < 6; i++)  covVtx[i] = 0.;
     }
-    
-    
-    AliAODVertex * vV0 = 
+
+
+    AliAODVertex * vV0 =
 	  new(Vertices()[fNumberOfVertices++]) AliAODVertex(pos,
 							    covVtx,
 							    chi2,
@@ -1037,8 +1066,8 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
 							    nV0,
 							    AliAODVertex::kV0);
     fPrimaryVertex->AddDaughter(vV0);
-    
-    
+
+
     // Add the positive tracks from the V0
 
     esdV0Pos->GetPxPyPz(momPos);
@@ -1046,7 +1075,7 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
     esdV0Pos->GetCovarianceXYZPxPyPz(covTr);
     //    esdV0Pos->GetESDpid(pid);
     esdV0Pos->GetTOFLabel(tofLabel);
-    
+
     const AliESDVertex *vtx = esd.GetPrimaryVertex();
 
     if (!fUsedTrack[posFromV0]) {
@@ -1055,14 +1084,14 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
 	    if (fTrackFilter) selectInfo = fTrackFilter->IsSelected(esdV0Pos);
 	    if(fMChandler)fMChandler->SelectParticle(esdV0Pos->GetLabel());
 	    aodTrack = new(Tracks()[fNumberOfTracks++]) AliAODTrack(esdV0Pos->GetID(),
-								    esdV0Pos->GetLabel(), 
-								    momPos, 
+								    esdV0Pos->GetLabel(),
+								    momPos,
 								    kTRUE,
 								    pos,
 								    kFALSE,
-								    covTr, 
+								    covTr,
 								    (Short_t)esdV0Pos->GetSign(),
-								    esdV0Pos->GetITSClusterMap(), 
+								    esdV0Pos->GetITSClusterMap(),
 								    // pid,
 								    vV0,
 								    kTRUE,  // check if this is right
@@ -1070,7 +1099,7 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
 								    AliAODTrack::kFromDecayVtx,
 								    selectInfo);
 	    aodTrack->SetITSSharedMap(esdV0Pos->GetITSSharedMap());
-	    aodTrack->SetITSchi2(esdV0Pos->GetITSchi2());      
+	    aodTrack->SetITSchi2(esdV0Pos->GetITSchi2());
 	    aodTrack->SetPIDForTracking(esdV0Pos->GetPIDForTracking());
 	    aodTrack->SetTPCFitMap(esdV0Pos->GetTPCFitMap());
 	    aodTrack->SetTPCClusterMap(esdV0Pos->GetTPCClusterMap());
@@ -1091,14 +1120,14 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
       aodTrack = static_cast<AliAODTrack*>(fAODTrackRefs->At(posFromV0));
     }
     vV0->AddDaughter(aodTrack);
-    
+
     // Add the negative tracks from the V0
     esdV0Neg->GetPxPyPz(momNeg);
     esdV0Neg->GetXYZ(pos);
     esdV0Neg->GetCovarianceXYZPxPyPz(covTr);
     //    esdV0Neg->GetESDpid(pid);
     esdV0Neg->GetTOFLabel(tofLabel);
-    
+
     if (!fUsedTrack[negFromV0]) {
       fUsedTrack[negFromV0] = kTRUE;
       UInt_t selectInfo = 0;
@@ -1110,9 +1139,9 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
 							      kTRUE,
 							      pos,
 							      kFALSE,
-							      covTr, 
+							      covTr,
 							      (Short_t)esdV0Neg->GetSign(),
-							      esdV0Neg->GetITSClusterMap(), 
+							      esdV0Neg->GetITSClusterMap(),
 							      // pid,
 							      vV0,
 							      kTRUE,  // check if this is right
@@ -1120,7 +1149,7 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
 							      AliAODTrack::kFromDecayVtx,
 							      selectInfo);
       aodTrack->SetITSSharedMap(esdV0Neg->GetITSSharedMap());
-      aodTrack->SetITSchi2(esdV0Neg->GetITSchi2());      
+      aodTrack->SetITSchi2(esdV0Neg->GetITSchi2());
       aodTrack->SetPIDForTracking(esdV0Neg->GetPIDForTracking());
       aodTrack->SetTPCFitMap(esdV0Neg->GetTPCFitMap());
       aodTrack->SetTPCClusterMap(esdV0Neg->GetTPCClusterMap());
@@ -1141,16 +1170,16 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
       aodTrack = static_cast<AliAODTrack*>(fAODTrackRefs->At(negFromV0));
     }
     vV0->AddDaughter(aodTrack);
-    
+
     // Add the V0 the V0 array as well
     Double_t  dcaV0Daughters      = v0->GetDcaV0Daughters();
     Double_t  dcaV0ToPrimVertex   = v0->GetD(esd.GetPrimaryVertex()->GetX(),
                                              esd.GetPrimaryVertex()->GetY(),
                                              esd.GetPrimaryVertex()->GetZ());
-    
-    v0->GetPPxPyPz(momPosAtV0vtx[0],momPosAtV0vtx[1],momPosAtV0vtx[2]); 
-    v0->GetNPxPyPz(momNegAtV0vtx[0],momNegAtV0vtx[1],momNegAtV0vtx[2]); 
-    
+
+    v0->GetPPxPyPz(momPosAtV0vtx[0],momPosAtV0vtx[1],momPosAtV0vtx[2]);
+    v0->GetNPxPyPz(momNegAtV0vtx[0],momNegAtV0vtx[1],momNegAtV0vtx[2]);
+
     Double_t dcaDaughterToPrimVertex[2] = { 999., 999.}; // ..[0] = DCA in (x,y) for Pos and ..[1] = Neg
     dcaDaughterToPrimVertex[0] = TMath::Abs(esdV0Pos->GetD(  esd.GetPrimaryVertex()->GetX(),
                                                            esd.GetPrimaryVertex()->GetY(),
@@ -1158,19 +1187,19 @@ void AliAnalysisTaskESDfilter::ConvertV0s(const AliESDEvent& esd)
     dcaDaughterToPrimVertex[1] = TMath::Abs(esdV0Neg->GetD(  esd.GetPrimaryVertex()->GetX(),
                                                            esd.GetPrimaryVertex()->GetY(),
                                                            esd.GetMagneticField()) );
-    
-    AliAODv0* aodV0 = new(V0s()[fNumberOfV0s++]) AliAODv0(vV0, 
+
+    AliAODv0* aodV0 = new(V0s()[fNumberOfV0s++]) AliAODv0(vV0,
                                                 dcaV0Daughters,
                                                 dcaV0ToPrimVertex,
                                                 momPosAtV0vtx,
                                                 momNegAtV0vtx,
                                                 dcaDaughterToPrimVertex);
-    
+
     // set the aod v0 on-the-fly status
     aodV0->SetOnFlyStatus(v0->GetOnFlyStatus());
-  }//End of loop on V0s 
-  
-  V0s().Expand(fNumberOfV0s);	 
+  }//End of loop on V0s
+
+  V0s().Expand(fNumberOfV0s);
 }
 
 //______________________________________________________________________________
@@ -1191,7 +1220,7 @@ void AliAnalysisTaskESDfilter::ConvertTPCOnlyTracks(const AliESDEvent& esd)
   /// the ITS cuts neeed to be added to the filter as extra cuts, since here the selections info is reset in the global and put to the TPC only track
 
   AliCodeTimerAuto("",0);
-  
+
   // Loop over the tracks and extract and mask out all aod tracks that pass the selections for AODt racks
   for(int it = 0;it < fNumberOfTracks;++it)
   {
@@ -1213,9 +1242,9 @@ void AliAnalysisTaskESDfilter::ConvertTPCOnlyTracks(const AliESDEvent& esd)
   const AliESDVertex *vtxSPD = esd.GetPrimaryVertexSPD();
   const AliESDVertex *vtx = esd.GetPrimaryVertex();
 
-  Double_t pos[3] = { 0. };      
+  Double_t pos[3] = { 0. };
   Double_t covTr[21]={0.};
-  //  Double_t pid[10]={0.};  
+  //  Double_t pid[10]={0.};
   Double_t p[3] = { 0. };
   Double_t pDCA[3] = { 0. }; // momentum at DCA
   Double_t rDCA[3] = { 0. }; // position at DCA
@@ -1236,12 +1265,12 @@ void AliAnalysisTaskESDfilter::ConvertTPCOnlyTracks(const AliESDEvent& esd)
       if(tmp1>ptMin)ptMin=tmp1;
       if(tmp2<ptMax)ptMax=tmp2;
     }
-  } 
+  }
 
-  for (Int_t nTrack = 0; nTrack < esd.GetNumberOfTracks(); ++nTrack) 
+  for (Int_t nTrack = 0; nTrack < esd.GetNumberOfTracks(); ++nTrack)
   {
-    AliESDtrack* esdTrack = esd.GetTrack(nTrack); //carefull do not modify it othwise  need to work with a copy 
-    
+    AliESDtrack* esdTrack = esd.GetTrack(nTrack); //carefull do not modify it othwise  need to work with a copy
+
     UInt_t selectInfo = 0;
     Bool_t isHybridITSTPC = false;
     //
@@ -1262,7 +1291,7 @@ void AliAnalysisTaskESDfilter::ConvertTPCOnlyTracks(const AliESDEvent& esd)
     // create a tpc only tracl
     AliESDtrack *track = AliESDtrackCuts::GetTPCOnlyTrack(const_cast<AliESDEvent*>(&esd),esdTrack->GetID());
     if (!track) continue;
-    
+
     if (track->Pt()>0.) {
       // only constrain tracks above threshold
       AliExternalTrackParam exParam;
@@ -1283,7 +1312,7 @@ void AliAnalysisTaskESDfilter::ConvertTPCOnlyTracks(const AliESDEvent& esd)
       // set the constrained parameters to the track
       track->Set(exParam.GetX(),exParam.GetAlpha(),exParam.GetParameter(),exParam.GetCovariance());
     }
-    
+
     track->GetPxPyPz(p);
 
     Float_t pT = track->Pt();
@@ -1304,23 +1333,23 @@ void AliAnalysisTaskESDfilter::ConvertTPCOnlyTracks(const AliESDEvent& esd)
 							    kTRUE,
 							    pos,
 							    kFALSE,
-							    covTr, 
+							    covTr,
 							    (Short_t)track->GetSign(),
-							    track->GetITSClusterMap(), 
+							    track->GetITSClusterMap(),
 							    // pid,
 							    fPrimaryVertex,
 							    kTRUE, // check if this is right
 							    vtx->UsesTrack(track->GetID()),
-							    AliAODTrack::kPrimary, 
+							    AliAODTrack::kPrimary,
 							    selectInfo);
     aodTrack->SetITSSharedMap(track->GetITSSharedMap());
-    aodTrack->SetITSchi2(track->GetITSchi2());      
+    aodTrack->SetITSchi2(track->GetITSchi2());
     aodTrack->SetPIDForTracking(track->GetPIDForTracking());
-    aodTrack->SetIsHybridTPCConstrainedGlobal(isHybridITSTPC);    
+    aodTrack->SetIsHybridTPCConstrainedGlobal(isHybridITSTPC);
     aodTrack->SetTPCFitMap(track->GetTPCFitMap());
     aodTrack->SetTPCClusterMap(track->GetTPCClusterMap());
     aodTrack->SetTPCSharedMap (track->GetTPCSharedMap());
-    aodTrack->SetIsTPCConstrained(kTRUE);    
+    aodTrack->SetIsTPCConstrained(kTRUE);
     aodTrack->SetChi2perNDF(Chi2perNDF(esdTrack)); // original track
     // set the DCA values to the AOD track
     aodTrack->SetPxPyPzAtDCA(pDCA[0],pDCA[1],pDCA[2]);
@@ -1333,7 +1362,7 @@ void AliAnalysisTaskESDfilter::ConvertTPCOnlyTracks(const AliESDEvent& esd)
     aodTrack->SetTOFLabel(tofLabel);
     CopyChi2TPCConstrainedVsGlobal(track, aodTrack);
     CopyCaloProps(track,aodTrack);
-    // do not duplicate PID information 
+    // do not duplicate PID information
     //    aodTrack->ConvertAliPIDtoAODPID();
     //    SetAODPID(esdTrack,aodTrack,detpid);
     delete track;
@@ -1349,7 +1378,7 @@ void AliAnalysisTaskESDfilter::ConvertGlobalConstrainedTracks(const AliESDEvent&
   /// using cut number (3) selects the tracks that complement (1) e.g. tracks witout ITS refit or cluster requirement
 
   AliCodeTimerAuto("",0);
-  
+
   // Loop over the tracks and extract and mask out all aod tracks that pass the selections for AODt racks
   for(int it = 0;it < fNumberOfTracks;++it)
   {
@@ -1368,10 +1397,10 @@ void AliAnalysisTaskESDfilter::ConvertGlobalConstrainedTracks(const AliESDEvent&
     }
   }
   // Loop over the ESD trcks and pick out the tracks passing the GlobalConstraint cuts
- 
-  Double_t pos[3] = { 0. };      
+
+  Double_t pos[3] = { 0. };
   Double_t covTr[21]={0.};
-  //  Double_t pid[10]={0.};  
+  //  Double_t pid[10]={0.};
   Double_t p[3] = { 0. };
 
   Double_t pDCA[3] = { 0. }; // momentum at DCA
@@ -1395,11 +1424,11 @@ void AliAnalysisTaskESDfilter::ConvertGlobalConstrainedTracks(const AliESDEvent&
       if(tmp1>ptMin)ptMin=tmp1;
       if(tmp2<ptMax)ptMax=tmp2;
     }
-  } 
+  }
 
- for (Int_t nTrack = 0; nTrack < esd.GetNumberOfTracks(); ++nTrack) 
+ for (Int_t nTrack = 0; nTrack < esd.GetNumberOfTracks(); ++nTrack)
   {
-    AliESDtrack* esdTrack = esd.GetTrack(nTrack); //carefull do not modify it othwise  need to work with a copy 
+    AliESDtrack* esdTrack = esd.GetTrack(nTrack); //carefull do not modify it othwise  need to work with a copy
     const AliExternalTrackParam * exParamGC = esdTrack->GetConstrainedParam();
     if(!exParamGC)continue;
 
@@ -1432,7 +1461,7 @@ void AliAnalysisTaskESDfilter::ConvertGlobalConstrainedTracks(const AliESDEvent&
     esdTrack->GetConstrainedXYZ(pos);
     exParamGC->GetCovarianceXYZPxPyPz(covTr);
     //    esdTrack->GetESDpid(pid);
-    esdTrack->GetTOFLabel(tofLabel); 
+    esdTrack->GetTOFLabel(tofLabel);
     if(fMChandler)fMChandler->SelectParticle(esdTrack->GetLabel());
     fUsedTrackCopy[nTrack] |= selectInfo;
     aodTrack = new(Tracks()[fNumberOfTracks++]) AliAODTrack((esdTrack->GetID()+1)*-1,
@@ -1441,20 +1470,20 @@ void AliAnalysisTaskESDfilter::ConvertGlobalConstrainedTracks(const AliESDEvent&
                                                             kTRUE,
                                                             pos,
                                                             kFALSE,
-                                                            covTr, 
+                                                            covTr,
                                                             (Short_t)esdTrack->GetSign(),
-                                                            esdTrack->GetITSClusterMap(), 
+                                                            esdTrack->GetITSClusterMap(),
                                                             // pid,
                                                             fPrimaryVertex,
                                                             kTRUE, // check if this is right
                                                             vtx->UsesTrack(esdTrack->GetID()),
-                                                            AliAODTrack::kPrimary, 
+                                                            AliAODTrack::kPrimary,
                                                             selectInfo);
     aodTrack->SetITSSharedMap(esdTrack->GetITSSharedMap());
-    aodTrack->SetITSchi2(esdTrack->GetITSchi2());      
+    aodTrack->SetITSchi2(esdTrack->GetITSchi2());
     aodTrack->SetPIDForTracking(esdTrack->GetPIDForTracking());
-    aodTrack->SetIsHybridGlobalConstrainedGlobal(isHybridGC);    
-    aodTrack->SetIsGlobalConstrained(kTRUE);    
+    aodTrack->SetIsHybridGlobalConstrainedGlobal(isHybridGC);
+    aodTrack->SetIsGlobalConstrained(kTRUE);
     aodTrack->SetTPCFitMap(esdTrack->GetTPCFitMap());
     aodTrack->SetTPCClusterMap(esdTrack->GetTPCClusterMap());
     aodTrack->SetTPCSharedMap (esdTrack->GetTPCSharedMap());
@@ -1485,9 +1514,9 @@ void AliAnalysisTaskESDfilter::ConvertTracks(const AliESDEvent& esd)
   /// Tracks (primary and orphan)
 
   AliCodeTimerAuto("",0);
-  
+
   AliDebug(1,Form("NUMBER OF ESD TRACKS %5d\n", esd.GetNumberOfTracks()));
-  
+
   const AliESDVertex *vtx = esd.GetPrimaryVertex();
   Double_t p[3] = { 0. };
   Double_t pos[3] = { 0. };
@@ -1498,10 +1527,10 @@ void AliAnalysisTaskESDfilter::ConvertTracks(const AliESDEvent& esd)
   AliAODPid* detpid(0x0);
 
 
-  for (Int_t nTrack = 0; nTrack < esd.GetNumberOfTracks(); ++nTrack) 
+  for (Int_t nTrack = 0; nTrack < esd.GetNumberOfTracks(); ++nTrack)
   {
     if (fUsedTrack[nTrack]) continue;
-    
+
     AliESDtrack *esdTrack = esd.GetTrack(nTrack);
     UInt_t selectInfo = 0;
     //
@@ -1510,7 +1539,7 @@ void AliAnalysisTaskESDfilter::ConvertTracks(const AliESDEvent& esd)
       selectInfo = fTrackFilter->IsSelected(esdTrack);
       if (!selectInfo && !vtx->UsesTrack(esdTrack->GetID())) continue;
     }
-    
+
     esdTrack->GetPxPyPz(p);
     esdTrack->GetXYZ(pos);
     esdTrack->GetCovarianceXYZPxPyPz(covTr);
@@ -1524,17 +1553,17 @@ void AliAnalysisTaskESDfilter::ConvertTracks(const AliESDEvent& esd)
                                                             kTRUE,
                                                             pos,
                                                             kFALSE,
-                                                            covTr, 
+                                                            covTr,
                                                             (Short_t)esdTrack->GetSign(),
-                                                            esdTrack->GetITSClusterMap(), 
+                                                            esdTrack->GetITSClusterMap(),
                                                             // pid,
                                                             fPrimaryVertex,
                                                             kTRUE, // check if this is right
                                                             vtx->UsesTrack(esdTrack->GetID()),
-                                                            AliAODTrack::kPrimary, 
+                                                            AliAODTrack::kPrimary,
                                                             selectInfo);
     aodTrack->SetITSSharedMap(esdTrack->GetITSSharedMap());
-    aodTrack->SetITSchi2(esdTrack->GetITSchi2());         
+    aodTrack->SetITSchi2(esdTrack->GetITSchi2());
     fPrimaryVertex->AddDaughter(aodTrack);
     aodTrack->SetPIDForTracking(esdTrack->GetPIDForTracking());
     aodTrack->SetTPCFitMap(esdTrack->GetTPCFitMap());
@@ -1545,7 +1574,10 @@ void AliAnalysisTaskESDfilter::ConvertTracks(const AliESDEvent& esd)
     aodTrack->SetTPCNCrossedRows(UShort_t(esdTrack->GetTPCCrossedRows()));
     aodTrack->SetIntegratedLength(esdTrack->GetIntegratedLength());
     aodTrack->SetTOFLabel(tofLabel);
-    CopyChi2TPCConstrainedVsGlobal(esdTrack, aodTrack);          
+    aodTrack->SetTOFchi2(esdTrack->GetTOFchi2());
+    aodTrack->SetTOFsignalDx(esdTrack->GetTOFsignalDx());
+    aodTrack->SetTOFsignalDz(esdTrack->GetTOFsignalDz());
+    CopyChi2TPCConstrainedVsGlobal(esdTrack, aodTrack);
     CopyCaloProps(esdTrack,aodTrack);
     fAODTrackRefs->AddAt(aodTrack, nTrack);
     if (esdTrack->GetSign() > 0) ++fNumberOfPositiveTracks;
@@ -1584,27 +1616,27 @@ void AliAnalysisTaskESDfilter::ConvertCaloClusters(const AliESDEvent& esd)
   /// Convert Calorimeter Clusters
 
   AliCodeTimerAuto("",0);
-  
+
   // Access to the AOD container of clusters
   TClonesArray &caloClusters = *(AODEvent()->GetCaloClusters());
   Int_t jClusters(0);
-  
+
   for (Int_t iClust=0; iClust<esd.GetNumberOfCaloClusters(); ++iClust) {
     AliESDCaloCluster * cluster = esd.GetCaloCluster(iClust);
-    
+
     Int_t  id        = cluster->GetID();
     Int_t  nLabel    = cluster->GetNLabels();
     Int_t *labels    = cluster->GetLabels();
-    if(labels){ 
+    if(labels){
       for(int i = 0;i < nLabel;++i) {
 	if(fMChandler)fMChandler->SelectParticle(labels[i]);
       }
-    }		
-    
+    }
+
     Float_t energy = cluster->E();
     Float_t posF[3] = { 0.};
     cluster->GetPosition(posF);
-    
+
     AliAODCaloCluster *caloCluster = new(caloClusters[jClusters++]) AliAODCaloCluster(id,
                                                                                       nLabel,
                                                                                       labels,
@@ -1612,24 +1644,24 @@ void AliAnalysisTaskESDfilter::ConvertCaloClusters(const AliESDEvent& esd)
                                                                                       posF,
                                                                                       NULL,
                                                                                       cluster->GetType(),0);
-    
+
     caloCluster->SetCaloCluster(cluster->GetDistanceToBadChannel(),
                                 cluster->GetDispersion(),
                                 cluster->GetM20(), cluster->GetM02(),
-                                cluster->GetEmcCpvDistance(),  
+                                cluster->GetEmcCpvDistance(),
 				cluster->GetNExMax(),cluster->GetTOF()) ;
     caloCluster->SetPIDFromESD(cluster->GetPID());
     caloCluster->SetNCells(cluster->GetNCells());
     caloCluster->SetCellsAbsId(cluster->GetCellsAbsId());
     caloCluster->SetCellsAmplitudeFraction(cluster->GetCellsAmplitudeFraction());
     caloCluster->SetTrackDistance(cluster->GetTrackDx(), cluster->GetTrackDz());
-    
+
     caloCluster->SetCellsMCEdepFractionMap(cluster->GetCellsMCEdepFractionMap());
     caloCluster->SetClusterMCEdepFraction (cluster->GetClusterMCEdepFraction ());
-    
+
     Int_t nMatchCount = 0;
     TArrayI* matchedT = cluster->GetTracksMatched();
-    if (fNumberOfTracks>0 && matchedT && cluster->GetTrackMatchedIndex() >= 0) {	
+    if (fNumberOfTracks>0 && matchedT && cluster->GetTrackMatchedIndex() >= 0) {
       for (Int_t im = 0; im < matchedT->GetSize(); im++) {
         Int_t iESDtrack = matchedT->At(im);;
         if (fAODTrackRefs->At(iESDtrack) != 0) {
@@ -1640,16 +1672,16 @@ void AliAnalysisTaskESDfilter::ConvertCaloClusters(const AliESDEvent& esd)
     }
     if(nMatchCount==0)
       caloCluster->SetTrackDistance(-999,-999);
-    
-  } 
-  caloClusters.Expand(jClusters); // resize TObjArray to 'remove' slots for pseudo clusters	 
+
+  }
+  caloClusters.Expand(jClusters); // resize TObjArray to 'remove' slots for pseudo clusters
 }
 
 //______________________________________________________________________________
 void AliAnalysisTaskESDfilter::ConvertCaloTrigger(TString calo, const AliESDEvent& esd)
 {
   AliCodeTimerAuto("",0);
-		
+
   if (calo == "PHOS") {
     AliAODCaloTrigger &aodTrigger = *(AODEvent()->GetCaloTrigger(calo));
     AliESDCaloTrigger &esdTrigger = *(esd.GetCaloTrigger(calo));
@@ -1666,10 +1698,10 @@ void AliAnalysisTaskESDfilter::ConvertCaloTrigger(TString calo, const AliESDEven
     }
     return;
   }
-		
+
   static Bool_t saveOnce = kFALSE;
   if (!saveOnce) {
-    AliAODHandler *aodHandler = dynamic_cast<AliAODHandler*>(AliAnalysisManager::GetAnalysisManager()->GetOutputEventHandler()); 
+    AliAODHandler *aodHandler = dynamic_cast<AliAODHandler*>(AliAnalysisManager::GetAnalysisManager()->GetOutputEventHandler());
     if (aodHandler) {
       TTree *aodTree = aodHandler->GetTree();
       if (aodTree) {
@@ -1681,14 +1713,14 @@ void AliAnalysisTaskESDfilter::ConvertCaloTrigger(TString calo, const AliESDEven
       }
     }
   }
-						
+
   AliAODCaloTrigger &aodTrigger = *(AODEvent()->GetCaloTrigger(calo));
   AliESDCaloTrigger &esdTrigger = *(esd.GetCaloTrigger(calo));
   aodTrigger.Allocate(esdTrigger.GetEntries());
-						
+
   esdTrigger.Reset();
-  while (esdTrigger.Next()) {	  
-    Int_t px, py, ts, nTimes, times[10], b; 
+  while (esdTrigger.Next()) {
+    Int_t px, py, ts, nTimes, times[10], b;
     Float_t a, t;
     esdTrigger.GetPosition(px, py);
     esdTrigger.GetAmplitude(a);
@@ -1699,14 +1731,15 @@ void AliAnalysisTaskESDfilter::ConvertCaloTrigger(TString calo, const AliESDEven
     esdTrigger.GetTriggerBits(b);
     aodTrigger.Add(px, py, a, t, times, nTimes, ts, b);
   }
-  
+
   for (int i = 0; i < 4; i++) aodTrigger.SetL1Threshold(i, esdTrigger.GetL1Threshold(i));
   Int_t v0[2] = {
     esdTrigger.GetL1V0(0),
     esdTrigger.GetL1V0(1)
   };
-  aodTrigger.SetL1V0(v0);	
+  aodTrigger.SetL1V0(v0);
   aodTrigger.SetL1FrameMask(esdTrigger.GetL1FrameMask());
+  for(int i = 0; i < 2; i++) aodTrigger.SetMedian(i, esdTrigger.GetMedian(i));
 }
 
 //______________________________________________________________________________
@@ -1723,7 +1756,7 @@ void AliAnalysisTaskESDfilter::ConvertEMCALCells(const AliESDEvent& esd)
     AliAODCaloCells &aodEMcells = *(AODEvent()->GetEMCALCells());
     aodEMcells.CreateContainer(nEMcell);
     aodEMcells.SetType(AliAODCaloCells::kEMCALCell);
-    for (Int_t iCell = 0; iCell < nEMcell; iCell++) {      
+    for (Int_t iCell = 0; iCell < nEMcell; iCell++) {
       aodEMcells.SetCell(iCell,esdEMcells.GetCellNumber(iCell),esdEMcells.GetAmplitude(iCell),
                          esdEMcells.GetTime(iCell), esdEMcells.GetMCLabel(iCell), esdEMcells.GetEFraction(iCell),
 			 esdEMcells.GetHighGain(iCell) );
@@ -1743,11 +1776,11 @@ void AliAnalysisTaskESDfilter::ConvertPHOSCells(const AliESDEvent& esd)
   if (esd.GetPHOSCells()) { // protection against missing ESD information
     AliESDCaloCells &esdPHcells = *(esd.GetPHOSCells());
     Int_t nPHcell = esdPHcells.GetNumberOfCells() ;
-    
+
     AliAODCaloCells &aodPHcells = *(AODEvent()->GetPHOSCells());
     aodPHcells.CreateContainer(nPHcell);
     aodPHcells.SetType(AliAODCaloCells::kPHOSCell);
-    for (Int_t iCell = 0; iCell < nPHcell; iCell++) {      
+    for (Int_t iCell = 0; iCell < nPHcell; iCell++) {
       aodPHcells.SetCell(iCell,esdPHcells.GetCellNumber(iCell),esdPHcells.GetAmplitude(iCell),
                          esdPHcells.GetTime(iCell), esdPHcells.GetMCLabel(iCell), esdPHcells.GetEFraction(iCell),
 			 esdPHcells.GetHighGain(iCell) );
@@ -1766,7 +1799,7 @@ void AliAnalysisTaskESDfilter::ConvertTracklets(const AliESDEvent& esd)
   AliAODTracklets &SPDTracklets = *(AODEvent()->GetTracklets());
   const AliMultiplicity *mult = esd.GetMultiplicity();
   if (mult) {
-    if (mult->GetNumberOfTracklets()>0) {      
+    if (mult->GetNumberOfTracklets()>0) {
       SPDTracklets.CreateContainer(mult->GetNumberOfTracklets());
       SPDTracklets.SetScaleDThetaBySin2T(mult->GetScaleDThetaBySin2T());
       for (Int_t n=0; n<mult->GetNumberOfTracklets(); n++) {
@@ -1781,6 +1814,7 @@ void AliAnalysisTaskESDfilter::ConvertTracklets(const AliESDEvent& esd)
     SPDTracklets.SetFastOrFiredChipMap(mult->GetFastOrFiredChipMap());
     SPDTracklets.SetFiredChips(0,mult->GetNumberOfFiredChips(0));
     SPDTracklets.SetFiredChips(1,mult->GetNumberOfFiredChips(1));
+    SPDTracklets.SetCentroidXY( mult->GetCentroidX(), mult->GetCentroidY() );
     //
     for (int i=6;i--;) SPDTracklets.SetITSClusters(i,mult->GetNumberOfITSClusters(i));
   } else {
@@ -1792,189 +1826,121 @@ void AliAnalysisTaskESDfilter::ConvertTracklets(const AliESDEvent& esd)
 void AliAnalysisTaskESDfilter::ConvertKinks(const AliESDEvent& esd)
 {
   AliCodeTimerAuto("",0);
-  
+
   // Kinks: it is a big mess the access to the information in the kinks
   // The loop is on the tracks in order to find the mother and daugther of each kink
-  
+
   Double_t covTr[21]={0.};
+  Double_t chi2(0.0);
+  Double_t covVtx[6] = { 0. };
+  Double_t motherPos[3] = { 0. };
+  Double_t p[3] = { 0. };
+  Double_t pos[3] = { 0. };
   //  Double_t pid[10]={0.};
   AliAODPid* detpid(0x0);
   Int_t tofLabel[3] = {0};
-  
-  fNumberOfKinks = esd.GetNumberOfKinks();
+
+  // fNumberOfKinks = esd.GetNumberOfKinks();
 
   const AliESDVertex* vtx = esd.GetPrimaryVertex();
-  
-  for (Int_t iTrack=0; iTrack<esd.GetNumberOfTracks(); ++iTrack) 
-  {
+
+  for (Int_t iTrack=0; iTrack<esd.GetNumberOfTracks(); ++iTrack) {
+    
     AliESDtrack * esdTrack = esd.GetTrack(iTrack);
+    Int_t indexkink = esdTrack->GetKinkIndex(0);
+    if(indexkink>=0) continue; // we look for mother kink
+
+    int kinkESDIdx = TMath::Abs(indexkink)-1;
+    AliESDkink *kink = esd.GetKink(kinkESDIdx);
+       
+    // kink selection
+    if (!kink || (fKinkFilter && !fKinkFilter->IsSelected(kink)) ) continue;
     
-    Int_t ikink = esdTrack->GetKinkIndex(0);
+    AliAODTrack * mother = NULL;
     
-    if (ikink && fNumberOfKinks) {
-      // Negative kink index: mother, positive: daughter
-      // Search for the second track of the kink
-	    
-      for (Int_t jTrack = iTrack+1; jTrack<esd.GetNumberOfTracks(); ++jTrack) {
-        AliESDtrack * esdTrack1 = esd.GetTrack(jTrack);
-        Int_t jkink = esdTrack1->GetKinkIndex(0);
-        
-        if ( TMath::Abs(ikink)==TMath::Abs(jkink) ) {
-          // The two tracks are from the same kink
-          if (fUsedKink[TMath::Abs(ikink)-1]) continue; // skip used kinks
-          
-          Int_t imother = -1;
-          Int_t idaughter = -1;
-          
-          if (ikink<0 && jkink>0) {
-            imother = iTrack;
-            idaughter = jTrack;
-          } else if (ikink>0 && jkink<0) {
-	    imother = jTrack;
-            idaughter = iTrack;
-          } else {
-            //cerr << "Error: Wrong combination of kink indexes: "
-            //	   << ikink << " " << jkink << endl;
-            continue;
-          }
-          
-          // Add the mother track if it passed primary track selection cuts
-          AliAODTrack * mother = NULL;
-          
-          UInt_t selectInfo = 0;
-          if (fTrackFilter) {
-            selectInfo = fTrackFilter->IsSelected(esd.GetTrack(imother));
-            if (!selectInfo) continue;
-          }
-          
-          if (!fUsedTrack[imother]) {
-            fUsedTrack[imother] = kTRUE;
-            AliESDtrack *esdTrackM = esd.GetTrack(imother);
-            Double_t p[3] = { 0. };
-            Double_t pos[3] = { 0. };
-            esdTrackM->GetPxPyPz(p);
-            esdTrackM->GetXYZ(pos);
-            esdTrackM->GetCovarianceXYZPxPyPz(covTr);
-	    //            esdTrackM->GetESDpid(pid);
-	    esdTrackM->GetTOFLabel(tofLabel);
-            if(fMChandler)fMChandler->SelectParticle(esdTrackM->GetLabel());
-            mother = new(Tracks()[fNumberOfTracks++]) AliAODTrack(esdTrackM->GetID(),
-								  esdTrackM->GetLabel(),
-								  p,
-								  kTRUE,
-								  pos,
-								  kFALSE,
-								  covTr, 
-								  (Short_t)esdTrackM->GetSign(),
-								  esdTrackM->GetITSClusterMap(), 
-								  // pid,
-								  fPrimaryVertex,
-								  kTRUE, // check if this is right
-								  vtx->UsesTrack(esdTrack->GetID()),
-								  AliAODTrack::kPrimary,
-								  selectInfo);
-	    mother->SetITSSharedMap(esdTrackM->GetITSSharedMap());
-	    mother->SetITSchi2(esdTrackM->GetITSchi2());      	    
-	    mother->SetPIDForTracking(esdTrackM->GetPIDForTracking());
-            mother->SetTPCFitMap(esdTrackM->GetTPCFitMap());
-            mother->SetTPCClusterMap(esdTrackM->GetTPCClusterMap());
-            mother->SetTPCSharedMap (esdTrackM->GetTPCSharedMap());
-            mother->SetChi2perNDF(Chi2perNDF(esdTrackM));
-            mother->SetTPCPointsF(esdTrackM->GetTPCNclsF());
-	    mother->SetTPCNCrossedRows(UShort_t(esdTrackM->GetTPCCrossedRows()));
-	    mother->SetIntegratedLength(esdTrackM->GetIntegratedLength());
-	    mother->SetTOFLabel(tofLabel);
-	    CopyChi2TPCConstrainedVsGlobal(esdTrackM, mother);
-	    CopyCaloProps(esdTrackM,mother);
-            fAODTrackRefs->AddAt(mother, imother);
-            if (esdTrackM->GetSign() > 0) ++fNumberOfPositiveTracks;
-            mother->SetFlags(esdTrackM->GetStatus());
-            mother->ConvertAliPIDtoAODPID();
-            fPrimaryVertex->AddDaughter(mother);
-            mother->ConvertAliPIDtoAODPID();
-            SetAODPID(esdTrackM,mother,detpid);
-          }
-          else {
-            //cerr << "Error: event " << esd.GetEventNumberInFile() << " kink " << TMath::Abs(ikink)-1
-            //     << " track " << imother << " has already been used!" << endl;
-          }
-          
-          // Add the kink vertex
-          AliESDkink * kink = esd.GetKink(TMath::Abs(ikink)-1);
-          
-          AliAODVertex * vkink = new(Vertices()[fNumberOfVertices++]) AliAODVertex(kink->GetPosition(),
-										   NULL,
-										   0.,
-										   mother,
-										   esdTrack->GetID(),  // ID of mother's track!
-										   AliAODVertex::kKink);
-          // Add the daughter track
-          AliAODTrack * daughter = NULL;
-          if (!fUsedTrack[idaughter]) {
-            fUsedTrack[idaughter] = kTRUE;
-            AliESDtrack *esdTrackD = esd.GetTrack(idaughter);
-            Double_t p[3] = { 0. };
-            Double_t pos[3] = { 0. };
-            esdTrackD->GetPxPyPz(p);
-            esdTrackD->GetXYZ(pos);
-            esdTrackD->GetCovarianceXYZPxPyPz(covTr);
-	    //            esdTrackD->GetESDpid(pid);
-	    esdTrackD->GetTOFLabel(tofLabel);
-            selectInfo = 0;
-            if (fTrackFilter) selectInfo = fTrackFilter->IsSelected(esdTrackD);
-            if(fMChandler)fMChandler->SelectParticle(esdTrackD->GetLabel());
-            daughter = new(Tracks()[fNumberOfTracks++]) AliAODTrack(esdTrackD->GetID(),
-								    esdTrackD->GetLabel(),
-								    p,
-								    kTRUE,
-								    pos,
-								    kFALSE,
-								    covTr, 
-								    (Short_t)esdTrackD->GetSign(),
-								    esdTrackD->GetITSClusterMap(), 
-								    // pid,
-								    vkink,
-								    kTRUE, // check if this is right
-								    vtx->UsesTrack(esdTrack->GetID()),
-								    AliAODTrack::kFromDecayVtx,
-								    selectInfo);
-	    daughter->SetITSSharedMap(esdTrackD->GetITSSharedMap());
-	    daughter->SetITSchi2(esdTrackD->GetITSchi2());      	    
-	    daughter->SetPIDForTracking(esdTrackD->GetPIDForTracking());
-            daughter->SetTPCFitMap(esdTrackD->GetTPCFitMap());
-            daughter->SetTPCClusterMap(esdTrackD->GetTPCClusterMap());
-            daughter->SetTPCSharedMap (esdTrackD->GetTPCSharedMap());
-	    daughter->SetTPCPointsF(esdTrackD->GetTPCNclsF());
-	    daughter->SetTPCNCrossedRows(UShort_t(esdTrackD->GetTPCCrossedRows()));
-	    daughter->SetIntegratedLength(esdTrackD->GetIntegratedLength());
-	    daughter->SetTOFLabel(tofLabel);
-	    CopyChi2TPCConstrainedVsGlobal(esdTrackD, daughter);
-	    CopyCaloProps(esdTrackD,daughter);
-            fAODTrackRefs->AddAt(daughter, idaughter);
-            if (esdTrackD->GetSign() > 0) ++fNumberOfPositiveTracks;
-            daughter->SetFlags(esdTrackD->GetStatus());
-            daughter->ConvertAliPIDtoAODPID();
-            vkink->AddDaughter(daughter);
-            daughter->ConvertAliPIDtoAODPID();
-            SetAODPID(esdTrackD,daughter,detpid);
-          } else {
-            //cerr << "Error: event " << esd.GetEventNumberInFile() << " kink " << TMath::Abs(ikink)-1
-            //     << " track " << idaughter << " has already been used!" << endl;
-          }
-        }
-      }
-    }      
-  }
+    if (!fUsedTrack[iTrack]) { // add mother track if not yet added, w/o check for the quality!
+      fUsedTrack[iTrack] = kTRUE;
+      UInt_t selectInfo = fTrackFilter ? fTrackFilter->IsSelected(esdTrack) : 0;
+      esdTrack->GetPxPyPz(p);
+      esdTrack->GetXYZ(motherPos);
+      esdTrack->GetCovarianceXYZPxPyPz(covTr);
+      esdTrack->GetTOFLabel(tofLabel);
+      if (fMChandler) fMChandler->SelectParticle( esdTrack->GetLabel() );
+      mother = new(Tracks()[fNumberOfTracks++]) AliAODTrack(esdTrack->GetID(),
+							    esdTrack->GetLabel(),
+							    p,
+							    kTRUE,
+							      motherPos,
+							    kFALSE,
+							    covTr,
+							    (Short_t)esdTrack->GetSign(),
+							    esdTrack->GetITSClusterMap(),
+							    fPrimaryVertex,
+							    kTRUE, // check if this is right
+							    vtx->UsesTrack(esdTrack->GetID()),
+							    AliAODTrack::kPrimary,
+							    selectInfo);
+      mother->SetITSSharedMap(esdTrack->GetITSSharedMap());
+      mother->SetITSchi2(esdTrack->GetITSchi2());
+      mother->SetPIDForTracking(esdTrack->GetPIDForTracking());
+      mother->SetTPCFitMap(esdTrack->GetTPCFitMap());
+      mother->SetTPCClusterMap(esdTrack->GetTPCClusterMap());
+      mother->SetTPCSharedMap (esdTrack->GetTPCSharedMap());
+      mother->SetChi2perNDF(Chi2perNDF(esdTrack));
+      mother->SetTPCPointsF(esdTrack->GetTPCNclsF());
+      mother->SetTPCNCrossedRows(UShort_t(esdTrack->GetTPCCrossedRows()));
+      mother->SetIntegratedLength(esdTrack->GetIntegratedLength());
+      mother->SetTOFLabel(tofLabel);
+      CopyChi2TPCConstrainedVsGlobal(esdTrack, mother);
+      CopyCaloProps(esdTrack,mother);
+      fAODTrackRefs->AddAt(mother, iTrack);
+      if (esdTrack->GetSign() > 0) ++fNumberOfPositiveTracks;
+      mother->SetFlags(esdTrack->GetStatus());
+      mother->ConvertAliPIDtoAODPID();
+      fPrimaryVertex->AddDaughter(mother);
+      mother->ConvertAliPIDtoAODPID();
+      SetAODPID(esdTrack,mother,detpid);
+    }
+    else {
+      mother = static_cast<AliAODTrack*>(fAODTrackRefs->At(iTrack));
+    }
+    
+    // add kink to AOD
+    const TVector3 vposKink(kink->GetPosition()); //reco kink vtx position
+    for (Int_t j=0; j<3; j++) pos[j]=vposKink[j];
+    AliAODVertex * vkink = new(Vertices()[fNumberOfVertices++]) AliAODVertex(pos,
+									     NULL,
+									     0.,
+									     mother,
+									     kinkESDIdx,  // ID of ESD kink
+									     AliAODVertex::kKink);
+    fPrimaryVertex->AddDaughter(vkink);
+    
+    Float_t kinkAngle = TMath::RadToDeg()*kink->GetAngle(2);
+    Double_t radius = kink->GetR();
+    Float_t qT = kink->GetQt();
+    const TVector3 motherMfromKink(kink->GetMotherP());
+    const TVector3 daughterMKink(kink->GetDaughterP());
+
+    AliAODkink* aodkink = new(Kinks()[fNumberOfKinks++]) AliAODkink(vkink,
+								    kinkAngle,
+								    radius,
+								    qT,
+								    motherMfromKink,
+								    daughterMKink);
+       
+  } // loop over tracks
+
 }
 
 //______________________________________________________________________________
 void AliAnalysisTaskESDfilter::ConvertPrimaryVertices(const AliESDEvent& esd)
 {
   AliCodeTimerAuto("",0);
-  
+
   // Access to the AOD container of vertices
   fNumberOfVertices = 0;
-  
+
   Double_t pos[3] = { 0. };
   Double_t covVtx[6] = { 0. };
 
@@ -1998,10 +1964,10 @@ void AliAnalysisTaskESDfilter::ConvertPrimaryVertices(const AliESDEvent& esd)
     if (!vtitle.Contains("VertexerTracks")) fPrimaryVertex->SetNContributors(vtx->GetNContributors());
   */
   fPrimaryVertex->SetNContributors(vtx->GetNContributors());
-  
-  if (fDebug > 0) fPrimaryVertex->Print();  
-  
-  // Add SPD "main" vertex 
+
+  if (fDebug > 0) fPrimaryVertex->Print();
+
+  // Add SPD "main" vertex
   const AliESDVertex *vtxS = esd.GetPrimaryVertexSPD();
   vtxS->GetXYZ(pos); // position
   vtxS->GetCovMatrix(covVtx); //covariance matrix
@@ -2009,8 +1975,8 @@ void AliAnalysisTaskESDfilter::ConvertPrimaryVertices(const AliESDEvent& esd)
   AliAODVertex(pos, covVtx, vtxS->GetChi2toNDF(), NULL, -1, AliAODVertex::kMainSPD);
   mVSPD->SetName(vtxS->GetName());
   mVSPD->SetTitle(vtxS->GetTitle());
-  mVSPD->SetNContributors(vtxS->GetNContributors()); 
-  
+  mVSPD->SetNContributors(vtxS->GetNContributors());
+
   // Add SPD pileup vertices
   for(Int_t iV=0; iV<esd.GetNumberOfPileupVerticesSPD(); ++iV) {
     const AliESDVertex *vtxP = esd.GetPileupVertexSPD(iV);
@@ -2020,24 +1986,46 @@ void AliAnalysisTaskESDfilter::ConvertPrimaryVertices(const AliESDEvent& esd)
     AliAODVertex(pos, covVtx, vtxP->GetChi2toNDF(), NULL, -1, AliAODVertex::kPileupSPD);
     pVSPD->SetName(vtxP->GetName());
     pVSPD->SetTitle(vtxP->GetTitle());
-    pVSPD->SetNContributors(vtxP->GetNContributors()); 
+    pVSPD->SetNContributors(vtxP->GetNContributors());
     pVSPD->SetBC(vtxP->GetBC());
   }
-  
-  // Add TRK pileup vertices
-  for(Int_t iV=0; iV<esd.GetNumberOfPileupVerticesTracks(); ++iV) {
-    const AliESDVertex *vtxP = esd.GetPileupVertexTracks(iV);
-    vtxP->GetXYZ(pos); // position
-    vtxP->GetCovMatrix(covVtx); //covariance matrix
-    AliAODVertex * pVTRK = new(Vertices()[fNumberOfVertices++])
-    AliAODVertex(pos, covVtx, vtxP->GetChi2toNDF(), NULL, -1, AliAODVertex::kPileupTracks);
-    pVTRK->SetName(vtxP->GetName());
-    pVTRK->SetTitle(vtxP->GetTitle());
-    pVTRK->SetNContributors(vtxP->GetNContributors());
-    pVTRK->SetBC(vtxP->GetBC());
-  }
 
-  // Add TPC "main" vertex 
+  if (fRunMVertexerForPileUp>0) { // run multivertexer to tag the pile-up
+    static TClonesArray mvResult("AliESDVertex");
+    // if cuts were provided, then run using them, otherwhise use defaults cuts for algo 6 (MV a la pp mode)
+    AliESDEvent* esdNC = const_cast<AliESDEvent*>(&esd); // not nice but would save some code
+    AliESDUtils::RefitESDVertexTracks(esdNC, fRefitVertexTracksCuts ? fRefitVertexTracksNCuts : 6, fRefitVertexTracksNCuts ? fRefitVertexTracksCuts : 0, &mvResult);
+    int nv = mvResult.GetEntriesFast();
+    for (int iv=0;iv<nv;iv++) {
+      const AliESDVertex* vtxP = (AliESDVertex*)mvResult[iv];
+      if (vtxP->GetID()>0 && vtxP->GetNContributors()<fRunMVertexerForPileUp) continue; // ignore low mult vertices (pile-up only, i.e. ID>0)
+      vtxP->GetXYZ(pos); // position
+      vtxP->GetCovMatrix(covVtx); //covariance matrix
+      AliAODVertex * pVTRK = new(Vertices()[fNumberOfVertices++])
+	AliAODVertex(pos, covVtx, vtxP->GetChi2toNDF(), NULL, -1, AliAODVertex::kPileupTracks);
+      pVTRK->SetID( vtxP->GetID() ); // ID<1 would correspond to "new" primary vertex
+      pVTRK->SetName(vtxP->GetName());
+      pVTRK->SetTitle(vtxP->GetTitle());
+      pVTRK->SetNContributors(vtxP->GetNContributors());
+      pVTRK->SetBC(vtxP->GetBC());      
+    }
+  }
+  else {
+    // Add TRK pileup vertices
+    for(Int_t iV=0; iV<esd.GetNumberOfPileupVerticesTracks(); ++iV) {
+      const AliESDVertex *vtxP = esd.GetPileupVertexTracks(iV);
+      vtxP->GetXYZ(pos); // position
+      vtxP->GetCovMatrix(covVtx); //covariance matrix
+      AliAODVertex * pVTRK = new(Vertices()[fNumberOfVertices++])
+	AliAODVertex(pos, covVtx, vtxP->GetChi2toNDF(), NULL, -1, AliAODVertex::kPileupTracks);
+      pVTRK->SetID( vtxP->GetID() ); // ID<1 would correspond to "new" primary vertex
+      pVTRK->SetName(vtxP->GetName());
+      pVTRK->SetTitle(vtxP->GetTitle());
+      pVTRK->SetNContributors(vtxP->GetNContributors());
+      pVTRK->SetBC(vtxP->GetBC());
+    }
+  }
+  // Add TPC "main" vertex
   const AliESDVertex *vtxT = esd.GetPrimaryVertexTPC();
   vtxT->GetXYZ(pos); // position
   vtxT->GetCovMatrix(covVtx); //covariance matrix
@@ -2045,7 +2033,27 @@ void AliAnalysisTaskESDfilter::ConvertPrimaryVertices(const AliESDEvent& esd)
   AliAODVertex(pos, covVtx, vtxT->GetChi2toNDF(), NULL, -1, AliAODVertex::kMainTPC);
   mVTPC->SetName(vtxT->GetName());
   mVTPC->SetTitle(vtxT->GetTitle());
-  mVTPC->SetNContributors(vtxT->GetNContributors()); 
+  mVTPC->SetNContributors(vtxT->GetNContributors());
+
+  // Add custom TPC and ITS pileup infos
+  static TVectorF vtiTPC(10), vtiITS(8);
+  AliAODHeader* headAOD = dynamic_cast<AliAODHeader*>(AODEvent()->GetHeader());
+  AliESDHeader* headESD = esd.GetHeader();
+  if (headESD->GetTPCPileUpInfo()) {
+    headAOD->SetTPCPileUpInfo( headESD->GetTPCPileUpInfo() );
+  }
+  else {
+    AliESDUtils::GetTPCPileupVertexInfo(&esd, vtiTPC);
+    headAOD->SetTPCPileUpInfo(&vtiTPC);
+  }
+  if (headESD->GetITSPileUpInfo()) {
+    headAOD->SetITSPileUpInfo( headESD->GetITSPileUpInfo() );
+  }
+  else {
+    AliESDUtils::GetITSPileupVertexInfo(&esd, vtiITS);
+    headAOD->SetITSPileUpInfo(&vtiITS);
+  }  
+  //
 }
 
 //______________________________________________________________________________
@@ -2062,21 +2070,21 @@ void AliAnalysisTaskESDfilter::ConvertTZERO(const AliESDEvent& esd)
 {
   /// Convert TZERO data
 
-  const AliESDTZERO* esdTzero = esd.GetESDTZERO(); 
+  const AliESDTZERO* esdTzero = esd.GetESDTZERO();
   AliAODTZERO* aodTzero = AODEvent()->GetTZEROData();
 
-  for (Int_t icase=0; icase<3; icase++){ 
+  for (Int_t icase=0; icase<3; icase++){
     aodTzero->SetT0TOF(    icase, esdTzero->GetT0TOF(icase));
-    aodTzero->SetT0TOFbest(icase, esdTzero->GetT0TOFbest(icase)); 
+    aodTzero->SetT0TOFbest(icase, esdTzero->GetT0TOFbest(icase));
   }
   aodTzero->SetBackgroundFlag(esdTzero->GetBackgroundFlag());
   aodTzero->SetPileupFlag(esdTzero->GetPileupFlag());
-  aodTzero->SetSatelliteFlag(esdTzero->GetSatellite()); 
+  aodTzero->SetSatelliteFlag(esdTzero->GetSatellite());
 
   Float_t rawTime[24];
   for(Int_t ipmt=0; ipmt<24; ipmt++)
     rawTime[ipmt] = esdTzero->GetTimeFull(ipmt,0);
-   
+
   Int_t idxOfFirstPmtA = -1,       idxOfFirstPmtC = -1;
   Float_t timeOfFirstPmtA = 9999, timeOfFirstPmtC = 9999;
   for(int ipmt=0;  ipmt<12; ipmt++){
@@ -2093,7 +2101,7 @@ void AliAnalysisTaskESDfilter::ConvertTZERO(const AliESDEvent& esd)
   }
 
   if(idxOfFirstPmtA != -1 && idxOfFirstPmtC != -1){
-    //speed of light in cm/ns   TMath::C()*1e-7 
+    //speed of light in cm/ns   TMath::C()*1e-7
     Float_t vertexraw = TMath::C()*1e-7 * (rawTime[idxOfFirstPmtA] - rawTime[idxOfFirstPmtC])/2;
     aodTzero->SetT0VertexRaw( vertexraw );
   }else{
@@ -2118,10 +2126,10 @@ void AliAnalysisTaskESDfilter::ConvertZDC(const AliESDEvent& esd)
   /// Convert ZDC data
 
   AliESDZDC* esdZDC = esd.GetZDCData();
-  
+
   const Double_t zem1Energy = esdZDC->GetZEM1Energy();
   const Double_t zem2Energy = esdZDC->GetZEM2Energy();
-   
+
   const Double_t *towZNC = esdZDC->GetZNCTowerEnergy();
   const Double_t *towZPC = esdZDC->GetZPCTowerEnergy();
   const Double_t *towZNA = esdZDC->GetZNATowerEnergy();
@@ -2130,7 +2138,7 @@ void AliAnalysisTaskESDfilter::ConvertZDC(const AliESDEvent& esd)
   const Double_t *towZNALG = esdZDC->GetZNATowerEnergyLR();
   const Double_t *towZPCLG = esdZDC->GetZPCTowerEnergyLR();
   const Double_t *towZPALG = esdZDC->GetZPATowerEnergyLR();
-  
+
   AliAODZDC* zdcAOD = AODEvent()->GetZDCData();
 
   zdcAOD->SetZEM1Energy(zem1Energy);
@@ -2139,24 +2147,31 @@ void AliAnalysisTaskESDfilter::ConvertZDC(const AliESDEvent& esd)
   zdcAOD->SetZNATowers(towZNA, towZNALG);
   zdcAOD->SetZPCTowers(towZPC, towZPCLG);
   zdcAOD->SetZPATowers(towZPA, towZPALG);
-  
+
   zdcAOD->SetZDCParticipants(esdZDC->GetZDCParticipants(), esdZDC->GetZDCPartSideA(), esdZDC->GetZDCPartSideC());
   zdcAOD->SetZDCImpactParameter(esdZDC->GetImpactParameter(), esdZDC->GetImpactParamSideA(), esdZDC->GetImpactParamSideC());
-  
+
   // Setters dealing only with the 1st stored TDC hit
-  zdcAOD->SetZDCTDCSum(esdZDC->GetZNTDCSum(0));	
-  zdcAOD->SetZDCTDCDiff(esdZDC->GetZNTDCDiff(0));	
-  
+  zdcAOD->SetZDCTDCSum(esdZDC->GetZNTDCSum(0));
+  zdcAOD->SetZDCTDCDiff(esdZDC->GetZNTDCDiff(0));
+
   zdcAOD->ResetZNAfired();
   zdcAOD->ResetZNCfired();
   zdcAOD->ResetZPAfired();
   zdcAOD->ResetZPCfired();
   zdcAOD->ResetZEM1fired();
   zdcAOD->ResetZEM2fired();
-  
+//
   const Float_t kNoEntry = -999.;
+  for(int i=0; i<4; i++){
+      zdcAOD->SetZNCTDCm(i, kNoEntry);
+      zdcAOD->SetZNATDCm(i, kNoEntry);
+      zdcAOD->SetZPCTDCm(i, kNoEntry);
+      zdcAOD->SetZPATDCm(i, kNoEntry);
+  }
+
   //Taking into account all the 4 hits
-  if(esdZDC->IsZNChit()){ 
+  if(esdZDC->IsZNChit()){
     zdcAOD->SetZNCfired();
     int zncch = esdZDC->GetZNCTDCChannel();
     if(zncch>0){
@@ -2166,18 +2181,16 @@ void AliAnalysisTaskESDfilter::ConvertZDC(const AliESDEvent& esd)
       }
     }
   }
-  else for(int i=0; i<4; i++)  zdcAOD->SetZNCTDCm(i, kNoEntry);
   if(esdZDC->IsZNAhit()){
     zdcAOD->SetZNAfired();
     int znach = esdZDC->GetZNATDCChannel();
-    if(znach>0){ 
+    if(znach>0){
       zdcAOD->SetZNATDC(esdZDC->GetZDCTDCCorrected(znach, 0));
       for(int i=0; i<4; i++){
          if(TMath::Abs(esdZDC->GetZDCTDCData(znach, i))>1e-6) zdcAOD->SetZNATDCm(i, esdZDC->GetZDCTDCCorrected(znach, i));
       }
     }
   }
-  else for(int i=0; i<4; i++)  zdcAOD->SetZNATDCm(i, kNoEntry);
   if(esdZDC->IsZPChit()){
     zdcAOD->SetZPCfired();
     int zpcch = esdZDC->GetZPCTDCChannel();
@@ -2188,7 +2201,6 @@ void AliAnalysisTaskESDfilter::ConvertZDC(const AliESDEvent& esd)
       }
     }
   }
-  else for(int i=0; i<4; i++)  zdcAOD->SetZPCTDCm(i, kNoEntry);
   if(esdZDC->IsZPAhit()){
     zdcAOD->SetZPAfired();
     int zpach = esdZDC->GetZPATDCChannel();
@@ -2199,9 +2211,9 @@ void AliAnalysisTaskESDfilter::ConvertZDC(const AliESDEvent& esd)
        }
     }
   }
-  else for(int i=0; i<4; i++)  zdcAOD->SetZPATDCm(i, kNoEntry);
   if(esdZDC->IsZEM1hit()) zdcAOD->SetZEM1fired();
   if(esdZDC->IsZEM2hit()) zdcAOD->SetZEM2fired();
+
 }
 //______________________________________________________________________________
 void AliAnalysisTaskESDfilter::ConvertAD(const AliESDEvent& esd)
@@ -2219,42 +2231,42 @@ Int_t AliAnalysisTaskESDfilter::ConvertHMPID(const AliESDEvent& esd) // clm
   /// We need to return an int since there is no signal counter in the ESD.
 
   AliCodeTimerAuto("",0);
-  
+
   Int_t cntHmpidGoodTracks = 0;
-  
+
   Float_t  xMip = 0;
   Float_t  yMip = 0;
   Int_t    qMip = 0;
   Int_t    nphMip = 0;
-  
+
   Float_t xTrk = 0;
   Float_t yTrk = 0;
   Float_t thetaTrk = 0;
   Float_t phiTrk = 0;
-  
+
   Double_t hmpPid[5]={0};
   Double_t hmpMom[3]={0};
-  
+
   TClonesArray &hmpidRings = *(AODEvent()->GetHMPIDrings());
-  
+
   for (Int_t iTrack=0; iTrack<esd.GetNumberOfTracks(); ++iTrack) {
     if(! esd.GetTrack(iTrack) ) continue;
-      
-    if(esd.GetTrack(iTrack)->GetHMPIDsignal() > -20 ) {                  // 
+
+    if(esd.GetTrack(iTrack)->GetHMPIDsignal() > -20 ) {                  //
       (esd.GetTrack(iTrack))->GetHMPIDmip(xMip, yMip, qMip, nphMip);     // Get MIP properties
       (esd.GetTrack(iTrack))->GetHMPIDtrk(xTrk,yTrk,thetaTrk,phiTrk);
       (esd.GetTrack(iTrack))->GetHMPIDpid(hmpPid);
       if((esd.GetTrack(iTrack))->GetOuterHmpParam()) (esd.GetTrack(iTrack))->GetOuterHmpPxPyPz(hmpMom);
-      
+
       if(esd.GetTrack(iTrack)->GetHMPIDsignal() == 0 && thetaTrk == 0 && qMip == 0 && nphMip ==0 ) continue;  //
-      
+
       new(hmpidRings[cntHmpidGoodTracks++]) AliAODHMPIDrings((esd.GetTrack(iTrack))->GetID(),             // Unique track id to attach the ring to
 							     1000000*nphMip+qMip,                         // MIP charge and number of photons
-							     (esd.GetTrack(iTrack))->GetHMPIDcluIdx(),    // 1000000*chamber id + cluster idx of assigned MIP cluster  
+							     (esd.GetTrack(iTrack))->GetHMPIDcluIdx(),    // 1000000*chamber id + cluster idx of assigned MIP cluster
 							     thetaTrk,                                    // track inclination angle theta
 							     phiTrk,                                      // track inclination angle phi
 							     (esd.GetTrack(iTrack))->GetHMPIDsignal(),    // Cherenkov angle
-							     (esd.GetTrack(iTrack))->GetHMPIDoccupancy(), // Occupancy claculated for the given chamber 
+							     (esd.GetTrack(iTrack))->GetHMPIDoccupancy(), // Occupancy claculated for the given chamber
 							     (esd.GetTrack(iTrack))->GetHMPIDchi2(),      // Ring resolution squared
 							     xTrk,                                        // Track x coordinate (LORS)
 							     yTrk,                                        // Track y coordinate (LORS)
@@ -2262,10 +2274,10 @@ Int_t AliAnalysisTaskESDfilter::ConvertHMPID(const AliESDEvent& esd) // clm
 							     yMip,                                        // MIP y coordinate (LORS)
 							     hmpPid,                                      // PID probablities from ESD, remove once it is CombinedPid
 							     hmpMom                                       // Track momentum in HMPID at ring reconstruction
-							     );  
+							     );
     }
   }
-  
+
   return cntHmpidGoodTracks;
 }
 
@@ -2349,7 +2361,7 @@ void AliAnalysisTaskESDfilter::ConvertTRD(const AliESDEvent& esd)
 								     AliAODTrack::kUndef,
 								     selectInfo);
 	  aodTrkMatch->SetITSSharedMap(esdTrkMatch->GetITSSharedMap());
-	  aodTrkMatch->SetITSchi2(esdTrkMatch->GetITSchi2());      	  
+	  aodTrkMatch->SetITSchi2(esdTrkMatch->GetITSchi2());
 	  aodTrkMatch->SetPIDForTracking(esdTrkMatch->GetPIDForTracking());
 	  aodTrkMatch->SetTPCFitMap(esdTrkMatch->GetTPCFitMap());
 	  aodTrkMatch->SetTPCClusterMap(esdTrkMatch->GetTPCClusterMap());
@@ -2375,36 +2387,40 @@ void AliAnalysisTaskESDfilter::ConvertTRD(const AliESDEvent& esd)
 }
 
 //______________________________________________________________________________
-void AliAnalysisTaskESDfilter::ConvertESDtoAOD() 
+void AliAnalysisTaskESDfilter::ConvertESDtoAOD()
 {
   /// ESD Filter analysis task executed for each event
 
   AliESDEvent* esd = dynamic_cast<AliESDEvent*>(InputEvent());
-  
+
   if(!esd)return;
 
   AliCodeTimerAuto("",0);
 
   TList modifiedCuts; // cuts modified to adjust them for particular event condition
   AdjustCutsForEvent(*esd, modifiedCuts, kFALSE);
-  
+
   if (fRefitVertexTracks>=0) AliESDUtils::RefitESDVertexTracks(esd,fRefitVertexTracks,
 							       fRefitVertexTracksNCuts ? fRefitVertexTracksCuts:0);
-  
+
   fOldESDformat = ( esd->GetAliESDOld() != 0x0 );
- 
+
       // Reconstruct cascades and V0 here
   if (fIsV0CascadeRecoEnabled) {
     esd->ResetCascades();
-    esd->ResetV0s();
+    
+    if(!fkDoSelectiveV0Reset){
+      esd->ResetV0s();
+    }else{
+      SelectiveResetV0s(esd, 0); //remove all offline V0s
+    }
 
     AliV0vertexer lV0vtxer;
     AliCascadeVertexer lCascVtxer;
 
     lV0vtxer.SetCuts(fV0Cuts);
     lCascVtxer.SetCuts(fCascadeCuts);
-
-
+    
     lV0vtxer.Tracks2V0vertices(esd);
     lCascVtxer.V0sTracks2CascadeVertices(esd);
   }
@@ -2413,29 +2429,35 @@ void AliAnalysisTaskESDfilter::ConvertESDtoAOD()
   if (fDoPropagateTrackToEMCal) {
     const Int_t ntrack = esd->GetNumberOfTracks();
     for (Int_t i=0;i<ntrack;++i) {
+      const Double_t mass=0.1396;
+      const Double_t step=20;
+      const Double_t minpT=0.35;
+      const Bool_t useMassForTracking = fUseMassForPropToEMCal;
+      const Bool_t useDCA = kFALSE;
+      const Bool_t useOuterParam = fUseOuterParamForPropToEMCal;
       AliESDtrack *t = esd->GetTrack(i);
-      AliEMCALRecoUtilsBase::ExtrapolateTrackToEMCalSurface(t,fEMCalSurfaceDistance);
+      AliEMCALRecoUtilsBase::ExtrapolateTrackToEMCalSurface(t,fEMCalSurfaceDistance,mass,step,minpT,useMassForTracking,useDCA,useOuterParam);
     }
   }
- 
+
   fNumberOfTracks = 0;
   fNumberOfPositiveTracks = 0;
   fNumberOfV0s = 0;
   fNumberOfVertices = 0;
   fNumberOfCascades = 0;
   fNumberOfKinks = 0;
-    
+
   AliAODHeader* header = ConvertHeader(*esd);
 
   if ( fIsVZEROEnabled ) ConvertVZERO(*esd);
   if ( fIsTZEROEnabled ) ConvertTZERO(*esd);
-  
-  // Fetch Stack for debuggging if available 
+
+  // Fetch Stack for debuggging if available
   fMChandler=0x0;
   if(MCEvent()) {
-    fMChandler = (AliMCEventHandler*) ((AliAnalysisManager::GetAnalysisManager())->GetMCtruthEventHandler()); 
+    fMChandler = (AliMCEventHandler*) ((AliAnalysisManager::GetAnalysisManager())->GetMCtruthEventHandler());
   }
-  
+
   // loop over events and fill them
   // Multiplicity information needed by the header (to be revised!)
   Int_t nTracks    = esd->GetNumberOfTracks();
@@ -2456,28 +2478,28 @@ void AliAnalysisTaskESDfilter::ConvertESDtoAOD()
   Int_t nCaloClus = esd->GetNumberOfCaloClusters();
   Int_t nFmdClus  = 0;
   Int_t nPmdClus  = esd->GetNumberOfPmdTracks();
-  Int_t nHmpidRings = 0;  
-    
+  Int_t nHmpidRings = 0;
+
   AliDebug(1,Form("   NV0=%d  NCASCADES=%d  NKINKS=%d", nV0s, nCascades, nKinks));
-       
+
   AODEvent()->ResetStd(nTracks, nVertices, nV0s, nCascades, nJets, nCaloClus, nFmdClus, nPmdClus, nHmpidRings);
 
   if (nV0s > 0) {
     // RefArray to store a mapping between esd V0 number and newly created AOD-Vertex V0
     fAODV0VtxRefs = new TRefArray(nV0s);
     // RefArray to store the mapping between esd V0 number and newly created AOD-V0
-    fAODV0Refs = new TRefArray(nV0s); 
+    fAODV0Refs = new TRefArray(nV0s);
     // Array to take into account the V0s already added to the AOD (V0 within cascades)
     fUsedV0 = new Bool_t[nV0s];
     for (Int_t iV0=0; iV0<nV0s; ++iV0) fUsedV0[iV0]=kFALSE;
   }
-  
+
   if (nTracks>0) {
     // RefArray to store the mapping between esd track number and newly created AOD-Track
-    
+
     fAODTrackRefs = new TRefArray(nTracks);
 
-    // Array to take into account the tracks already added to the AOD    
+    // Array to take into account the tracks already added to the AOD
     fUsedTrack = new Bool_t[nTracks];
     fUsedTrackCopy = new UInt_t[nTracks];
     for (Int_t iTrack=0; iTrack<nTracks; ++iTrack) {
@@ -2485,13 +2507,13 @@ void AliAnalysisTaskESDfilter::ConvertESDtoAOD()
       fUsedTrackCopy[iTrack] = 0;
     }
   }
-  
+
   // Array to take into account the kinks already added to the AOD
   if (nKinks>0) {
     fUsedKink = new Bool_t[nKinks];
     for (Int_t iKink=0; iKink<nKinks; ++iKink) fUsedKink[iKink]=kFALSE;
   }
-    
+
   ConvertPrimaryVertices(*esd);
 
   //setting best TOF PID
@@ -2503,32 +2525,32 @@ void AliAnalysisTaskESDfilter::ConvertESDtoAOD()
     delete fESDpid;
     fESDpid = 0;
   }
-  if (!fESDpid) { //in case of no Tender attached 
+  if (!fESDpid) { //in case of no Tender attached
     fESDpid = new AliESDpid;
     fIsPidOwner = kTRUE;
   }
-  
-  if (!esd->GetTOFHeader()) { //protection in case the pass2 LHC10b,c,d have been processed without tender. 
+
+  if (!esd->GetTOFHeader()) { //protection in case the pass2 LHC10b,c,d have been processed without tender.
     Float_t t0spread[10];
-    Float_t intrinsicTOFres=100; //ps ok for LHC10b,c,d pass2!! 
+    Float_t intrinsicTOFres=100; //ps ok for LHC10b,c,d pass2!!
     for (Int_t i=0; i<10; i++) t0spread[i] = (TMath::Sqrt(esd->GetSigma2DiamondZ()))/0.03; //0.03 to convert from cm to ps
     fESDpid->GetTOFResponse().SetT0resolution(t0spread);
     fESDpid->GetTOFResponse().SetTimeResolution(intrinsicTOFres);
-    //    fESDpid->SetTOFResponse(esd, (AliESDpid::EStartTimeType_t)fTimeZeroType);    
-    AliTOFHeader tmpTOFHeader(0,t0spread[0],0,NULL,NULL,NULL,intrinsicTOFres,t0spread[0]);   
+    //    fESDpid->SetTOFResponse(esd, (AliESDpid::EStartTimeType_t)fTimeZeroType);
+    AliTOFHeader tmpTOFHeader(0,t0spread[0],0,NULL,NULL,NULL,intrinsicTOFres,t0spread[0]);
     AODEvent()->SetTOFHeader(&tmpTOFHeader);         // write dummy TOF header in AOD
   } else {
     AODEvent()->SetTOFHeader(esd->GetTOFHeader());    // write TOF header in AOD
   }
-  
-  // In case of AOD production strating form LHC10e without Tender. 
-  //if(esd->GetTOFHeader() && fIsPidOwner) fESDpid->SetTOFResponse(esd, (AliESDpid::EStartTimeType_t)fTimeZeroType); 
-  
+
+  // In case of AOD production strating form LHC10e without Tender.
+  //if(esd->GetTOFHeader() && fIsPidOwner) fESDpid->SetTOFResponse(esd, (AliESDpid::EStartTimeType_t)fTimeZeroType);
+
   if (fAreCascadesEnabled) ConvertCascades(*esd);
   if (fAreV0sEnabled) ConvertV0s(*esd);
   if (fAreKinksEnabled) ConvertKinks(*esd);
   if (fAreTracksEnabled) ConvertTracks(*esd);
-  
+
   // Update number of AOD tracks in header at the end of track loop (M.G.)
   header->SetRefMultiplicity(fNumberOfTracks);
   header->SetRefMultiplicityPos(fNumberOfPositiveTracks);
@@ -2536,7 +2558,7 @@ void AliAnalysisTaskESDfilter::ConvertESDtoAOD()
 
 
   if (fTPCConstrainedFilterMask) ConvertTPCOnlyTracks(*esd);
-  if (fGlobalConstrainedFilterMask) ConvertGlobalConstrainedTracks(*esd);  
+  if (fGlobalConstrainedFilterMask) ConvertGlobalConstrainedTracks(*esd);
   if (fArePmdClustersEnabled) ConvertPmdClusters(*esd);
   if (fAreCaloClustersEnabled) ConvertCaloClusters(*esd);
   if (fAreEMCALCellsEnabled) ConvertEMCALCells(*esd);
@@ -2546,7 +2568,7 @@ void AliAnalysisTaskESDfilter::ConvertESDtoAOD()
   if (fAreTrackletsEnabled) ConvertTracklets(*esd);
   if (fIsZDCEnabled) ConvertZDC(*esd);
   if (fIsADEnabled) ConvertAD(*esd);
-  if (fIsHMPIDEnabled) nHmpidRings = ConvertHMPID(*esd); 
+  if (fIsHMPIDEnabled) nHmpidRings = ConvertHMPID(*esd);
   if (fIsTRDEnabled) ConvertTRD(*esd);
 
 
@@ -2559,7 +2581,7 @@ void AliAnalysisTaskESDfilter::ConvertESDtoAOD()
   delete[] fUsedKink; fUsedKink=0x0;
 
   if (modifiedCuts.GetEntries()) AdjustCutsForEvent(*esd, modifiedCuts, kTRUE); // revert
-  
+
   if (fIsPidOwner) {
     delete fESDpid;
     fESDpid = 0x0;
@@ -2579,7 +2601,7 @@ void AliAnalysisTaskESDfilter::SetAODPID(AliESDtrack *esdtrack, AliAODTrack *aod
     if (selectInfo)  pidSave = kTRUE;
   }
 
-  // Tracks passing pt cut 
+  // Tracks passing pt cut
   if(esdtrack->Pt()>fHighPthreshold) {
     pidSave = kTRUE;
   } else {
@@ -2619,7 +2641,7 @@ void AliAnalysisTaskESDfilter::SetDetectorRawSignals(AliAODPid *aodpid, AliESDtr
   Double_t itsdedx[4]; // dE/dx samples for individual ITS layers
   track->GetITSdEdxSamples(itsdedx);
   aodpid->SetITSdEdxSamples(itsdedx);
-  
+
   aodpid->SetTPCsignal(track->GetTPCsignal());
   aodpid->SetTPCsignalN(track->GetTPCsignalN());
   if (track->GetTPCdEdxInfo()) aodpid->SetTPCdEdxInfo(track->GetTPCdEdxInfo());
@@ -2630,7 +2652,7 @@ void AliAnalysisTaskESDfilter::SetDetectorRawSignals(AliAODPid *aodpid, AliESDtr
   for(Int_t iSl =0; iSl < track->GetNumberOfTRDslices(); iSl++) {
     for(Int_t iPl =0; iPl<6; iPl++) trdslices[iPl*track->GetNumberOfTRDslices()+iSl] = track->GetTRDslice(iPl,iSl);
   }
- 
+
   //TRD momentum
   for(Int_t iPl=0;iPl<6;iPl++){
     Double_t trdmom=track->GetTRDmomentum(iPl);
@@ -2643,17 +2665,17 @@ void AliAnalysisTaskESDfilter::SetDetectorRawSignals(AliAODPid *aodpid, AliESDtr
   //TRD clusters and tracklets
   aodpid->SetTRDncls(track->GetTRDncls());
   aodpid->SetTRDntrackletsPID(track->GetTRDntrackletsPID());
-  
+
   aodpid->SetTRDChi2(track->GetTRDchi2());
 
-  //TOF PID  
+  //TOF PID
   Double_t times[AliPID::kSPECIESC]; track->GetIntegratedTimes(times,AliPID::kSPECIESC);
   aodpid->SetIntegratedTimes(times);
 
   //  Float_t tzeroTrack = fESDpid->GetTOFResponse().GetStartTime(track->P());
   //  aodpid->SetTOFsignal(track->GetTOFsignal()-tzeroTrack);
   aodpid->SetTOFsignal(track->GetTOFsignal());
-  
+
   Double_t tofRes[5];
   for (Int_t iMass=0; iMass<5; iMass++){
     //    tofRes[iMass]=(Double_t)fESDpid->GetTOFResponse().GetExpectedSigma(track->P(), times[iMass], AliPID::ParticleMass(iMass));
@@ -2708,7 +2730,7 @@ void  AliAnalysisTaskESDfilter::PrintMCInfo(AliStack *pStack,Int_t label)
 }
 
 //______________________________________________________________________________
-void  AliAnalysisTaskESDfilter::CopyCaloProps(AliESDtrack *tre, AliAODTrack *tra) 
+void  AliAnalysisTaskESDfilter::CopyCaloProps(AliESDtrack *tre, AliAODTrack *tra)
 {
   /// Copy calo properties from ESD track to AOD track
 
@@ -2725,7 +2747,7 @@ void AliAnalysisTaskESDfilter::CopyChi2TPCConstrainedVsGlobal(AliESDtrack *esdt,
   if(esdt->GetCachedChi2TPCConstrainedVsGlobalVal()>-5 || !esdt->IsOn(AliESDtrack::kTPCin)){
     //Golden chi2 is from AliESDtrackCuts or no TPC track
     aodt->SetChi2TPCConstrainedVsGlobal(esdt->GetCachedChi2TPCConstrainedVsGlobalVal());
-  }else{ //Golden chi2 is not calculated in AliESDtrackCuts. Do calculate here. 
+  }else{ //Golden chi2 is not calculated in AliESDtrackCuts. Do calculate here.
     const AliESDEvent* esdEvent = esdt->GetESDEvent();
     const AliESDVertex* vertex = esdEvent ? esdEvent->GetPrimaryVertex() : 0;
     if ((vertex && vertex->GetStatus())) aodt->SetChi2TPCConstrainedVsGlobal(esdt->GetChi2TPCConstrainedVsGlobal(vertex));
@@ -2788,7 +2810,7 @@ void AliAnalysisTaskESDfilter::AdjustCutsForEvent(const AliESDEvent& esd, TList&
     modifiedCuts.Clear();
     return;
   }
-  
+
   // this is relevant only events w/o TPC
   if (esd.GetNumberOfTPCClusters()>0) return;
   int nPureSA = 0, nCompSA = 0;
@@ -2804,7 +2826,7 @@ void AliAnalysisTaskESDfilter::AdjustCutsForEvent(const AliESDEvent& esd, TList&
     if ( flags & AliESDtrack::kITSin ) {
       nCompSA++;
       break;
-    };    
+    };
   }
   if (nPureSA && !nCompSA) {
     // check if there are cuts asking for complementary ITS_SA tracks
@@ -2824,5 +2846,46 @@ void AliAnalysisTaskESDfilter::AdjustCutsForEvent(const AliESDEvent& esd, TList&
       printOnce = kFALSE;
     }
   }
+
+}
+
+//________________________________________________________________________
+Float_t AliAnalysisTaskESDfilter::GetCosPA(AliESDtrack *lPosTrack, AliESDtrack *lNegTrack, Float_t lB, Float_t *lVtx)
+//Encapsulation of CosPA calculation (warning: considers AliESDtrack clones)
+{
+  Float_t lCosPA = -1;
   
+  //Copy AliExternalParam for handling
+  AliExternalTrackParam nt(*lNegTrack), pt(*lPosTrack), *lNegClone=&nt, *lPosClone=&pt;
+  
+  //Find DCA
+  Double_t xn, xp, dca=lNegClone->GetDCA(lPosClone,lB,xn,xp);
+  
+  //Propagate to it
+  nt.PropagateTo(xn,lB); pt.PropagateTo(xp,lB);
+  
+  //Create V0 object to do propagation
+  AliESDv0 vertex(nt,1,pt,2); //Never mind indices, won't use
+  
+  //Get CosPA
+  lCosPA=vertex.GetV0CosineOfPointingAngle(lVtx[0], lVtx[1], lVtx[2]);
+  
+  //Return value
+  return lCosPA;
+}
+
+//________________________________________________________________________
+void AliAnalysisTaskESDfilter::SelectiveResetV0s(AliESDEvent *event, Int_t lType){
+  //Selectively reset V0s
+  Long_t iV0=0;
+  while(iV0 < event->GetNumberOfV0s() ) //extra-crazy test
+  {   // This is the begining of the V0 loop
+    AliESDv0 *v0 = ((AliESDEvent*)event)->GetV0(iV0);
+    if (!v0) continue;
+    if ( v0->GetOnFlyStatus() == lType ){
+      event->RemoveV0(iV0);
+    } else {
+      iV0++;
+    }
+  }
 }

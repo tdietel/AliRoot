@@ -107,7 +107,7 @@ AliESDCaloCells & AliESDCaloCells::operator =(const AliESDCaloCells& source)
     }
     
     if(source.fHGLG)
-      memcpy(fCellNumber,source.fHGLG,fNCells*sizeof(Bool_t));
+      memcpy(fHGLG,source.fHGLG,fNCells*sizeof(Bool_t));
     memcpy(fCellNumber,source.fCellNumber,fNCells*sizeof(Short_t));
     memcpy(fAmplitude, source.fAmplitude, fNCells*sizeof(Double32_t));
     memcpy(fTime,      source.fTime,      fNCells*sizeof(Double32_t));
@@ -364,5 +364,13 @@ Bool_t AliESDCaloCells::SetCell(Short_t pos,     Short_t cellNumber, Double32_t 
     
   } else {
     return kFALSE;
+  }
+}
+
+void AliESDCaloCells::Print(Option_t *) const
+{
+  for(Int_t i = 0; i < fNCells; i++) {
+    printf("#%3d Cell:%4d Amp:%e Time:%e HighGain:%d EFrac:%e Lbl:%d\n", i, fCellNumber[i], fAmplitude[i], fTime[i],
+           fHGLG ? fHGLG[i]:kFALSE, fEFraction ? fEFraction[i]:-1., fMCLabel ? fMCLabel[i] : -1);
   }
 }

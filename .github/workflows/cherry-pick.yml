@@ -1,0 +1,40 @@
+name: Cherry pick commit(s)
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'Commit to cherrypick'
+        required: true
+      branch:
+        description: 'Branch to cherry pick to'
+        required: true
+        default: 'v5-09-XX'
+      
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Decide which branch to use
+      run: |
+        cat << EOF
+        ::set-output name=branch::$(echo ${{ github.event.inputs.branch }}-patches | sed -e's/[a-z][a-z]*-patches$/-patches/')
+        EOF
+      id: decide_release_branch
+    - uses: actions/checkout@v2
+      with:
+        ref: "${{ steps.decide_release_branch.outputs.branch }}"
+    - name: Update the branch
+      run: |
+        set -e
+        git config --global user.email "alibuild@cern.ch"
+        git config --global user.name "ALICE Action Bot"
+        git fetch origin master 
+        git cherry-pick ${{ github.event.inputs.commit }}
+
+    - name: Create Pull Request
+      uses: alisw/create-pull-request@v3
+      with:
+        branch: cherry-picks-for-${{ steps.decide_release_branch.outputs.branch }}
+

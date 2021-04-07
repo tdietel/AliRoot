@@ -9,6 +9,7 @@
 #include "TList.h"
 #include "TTree.h"
 #include "TString.h"
+#include "TObjString.h"
 
 #define NPMT0 24  //number T0 of photomultipliers
 
@@ -32,7 +33,7 @@ class AliT0CalibAnalysisTask : public AliAnalysisTaskSE {
     fMultiplicity(-99999),
   fTriggerinput(0x0), fZDCbg(kFALSE),
   fTOFtracks(0), fT0tofTrack(0),
-  fESDpid(new AliESDpid())
+  fESDpid(new AliESDpid()), fPFPbit()
     {};
 
   AliT0CalibAnalysisTask(const char *name);

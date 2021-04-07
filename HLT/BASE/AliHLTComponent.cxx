@@ -46,10 +46,12 @@
 #include "AliHLTMemoryFile.h"
 #include "AliHLTMisc.h"
 #include "TTimeStamp.h"
+#include "TObjString.h"
 #include <cassert>
 #include <ctime>
 #include <stdint.h>
 #include "TStreamerInfo.h"
+#include "TMap.h"
 
 #include <time.h>
 #include <sys/time.h>

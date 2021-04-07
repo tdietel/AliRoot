@@ -56,7 +56,7 @@
 #include "AliITSV0Finder.h"
 #include "AliITStrackerHLT.h"
 #include "TStopwatch.h"
-//#include "AliHLTTPCCATrackParam.h"
+//#include "GPUTPCTrackParam.h"
 //#include "AliHLTVertexer.h"
 #include <vector>
 #include "AliHLTITSTrackPoint.h"
@@ -69,8 +69,8 @@ Bool_t AliITStrackerHLT::CheckTrack( const AliExternalTrackParam *t )
   // Check that the track parameters are reasonable in order to avoid floating point exeptions in AliExternalTrackParam routines
   
   bool ok = 1;
-  for( int i=0; i<5; i++ ) ok = ok && finite(t->GetParameter()[i]);
-  for( int i=0; i<15; i++ ) ok = ok && finite(t->GetCovariance()[i]);
+  for( int i=0; i<5; i++ ) ok = ok && isfinite(t->GetParameter()[i]);
+  for( int i=0; i<15; i++ ) ok = ok && isfinite(t->GetCovariance()[i]);
   ok = ok && ( TMath::Abs(t->GetX()) < 500. );
   ok = ok && ( TMath::Abs(t->GetY()) < 500. );
   ok = ok && ( TMath::Abs(t->GetZ()) < 500. );

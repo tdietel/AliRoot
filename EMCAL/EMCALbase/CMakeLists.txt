@@ -21,8 +21,8 @@ add_definitions(-D_MODULE_="${MODULE}")
 include_directories(${AliRoot_SOURCE_DIR}/EMCAL/${MODULE})
 
 # Additional include folders in alphabetical order except ROOT
-include_directories(${ROOT_INCLUDE_DIR}
-                    ${AliRoot_SOURCE_DIR}/EMCAL/EMCALraw
+include_directories(SYSTEM ${ROOT_INCLUDE_DIR})
+include_directories(${AliRoot_SOURCE_DIR}/EMCAL/EMCALraw
                     ${AliRoot_SOURCE_DIR}/EMCAL/EMCALUtils
                     ${AliRoot_SOURCE_DIR}/RAW/RAWDatabase
                     ${AliRoot_SOURCE_DIR}/RAW/RAWDatarec
@@ -40,6 +40,7 @@ set(SRCS
     AliCaloCalibSignal.cxx
     AliEMCALBiasAPD.cxx
     AliEMCALCalibAbs.cxx
+    AliEMCALCalibBadChannels.cxx
     AliEMCALCalibData.cxx
     AliEMCALCalibTime.cxx
     AliEMCALCalibMapAPD.cxx
@@ -132,14 +133,22 @@ install(FILES ${HDRS} DESTINATION include)
 add_executable(testemcaltrudcsconfig TestsAliEMCALTriggerTRUDCSConfig.cxx)
 target_link_libraries(testemcaltrudcsconfig ${MODULE} ${LIBDEPS})
 add_test(func_EMCALbase_AliEMCALTriggerTRUDCSConfig 
-    testemcaltrudcsconfig)
+    ENV
+    PATH=$ENV{PATH}
+    LD_LIBRARY_PATH=${CMAKE_INSTALL_PREFIX}/lib:$ENV{LD_LIBRARY_PATH}
+    DYLD_LIBRARY_PATH=${CMAKE_INSTALL_PREFIX}/lib:$ENV{DYLD_LIBRARY_PATH}
+    ${CMAKE_INSTALL_PREFIX}/bin/testemcaltrudcsconfig)
 install(TARGETS testemcaltrudcsconfig RUNTIME DESTINATION bin)
 
 # STU DCS config unit test
 add_executable(testemcalstudcsconfig TestsAliEMCALTriggerSTUDCSConfig.cxx)
 target_link_libraries(testemcalstudcsconfig ${MODULE} ${LIBDEPS})
 add_test(func_EMCALbase_AliEMCALTriggerSTUDCSConfig 
-    testemcalstudcsconfig)
+    ENV
+    PATH=$ENV{PATH}
+    LD_LIBRARY_PATH=${CMAKE_INSTALL_PREFIX}/lib:$ENV{LD_LIBRARY_PATH}
+    DYLD_LIBRARY_PATH=${CMAKE_INSTALL_PREFIX}/lib:$ENV{DYLD_LIBRARY_PATH}
+    ${CMAKE_INSTALL_PREFIX}/bin/testemcalstudcsconfig)
 install(TARGETS testemcalstudcsconfig RUNTIME DESTINATION bin)
 
 # Static version if DA enabled

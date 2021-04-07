@@ -56,6 +56,7 @@
 #include "AliTRDtrackerDebug.h"
 #include "AliTRDtrackingChamber.h"
 #include "AliTRDchamberTimeBin.h"
+#include "AliTRDCalDet.h"
 
 ClassImp(AliTRDtrackerV1)
 ClassImp(AliTRDtrackerV1::AliTRDLeastSquare)
@@ -503,7 +504,7 @@ Int_t AliTRDtrackerV1::RefitInward(AliESDEvent *event)
   for (Int_t itrack = 0; itrack < event->GetNumberOfTracks(); itrack++) {
     AliESDtrack *seed = event->GetTrack(itrack);
     ULong64_t status = seed->GetStatus();
-
+    FollowInterpolationsTPCTOF(*seed);
     new(&track) AliTRDtrackV1(*seed);
     if (track.GetX() < 270.0) {
       seed->UpdateTrackParams(&track, AliESDtrack::kTRDbackup);
@@ -4380,4 +4381,313 @@ Double_t AliTRDtrackerV1::AliTRDtrackFitterRieman::CalculateReferenceX(){
     meanDistance /= nDistances;
   }
   return fTracklets[startIndex]->GetX0() + (2.5 - startIndex) * meanDistance - 0.5 * (AliTRDgeometry::AmThick() + AliTRDgeometry::DrThick());
+}
+
+///
+/// \param esdTrack  - esdTrack to foolow
+/// \return
+/// Algorithm:
+/// loop over all possible TOF hits
+///     propagate Out parameters to the TOF hit
+///     apply chi2 cut
+///     update track with TOF hit
+///     create "TRDtrack" from updated track
+///
+///     loop overs TRD  layers
+///          create tracklet
+///          tracklet.AttachClusters
+///                   * finding clusters in road
+///          Refit tracklet - Robust
+///                   * QA information - extracting position and angle - to caompare with track angle
+///          calculated "causality information  to store per TOF hit
+///             bitmask,   Ncl array per layer
+///                   * chamber non active (-2) , dead zone (-1) , no hit (0),     Ncl compressed format  (e.g int(Ncl/4))
+///             material budget mask
+///                   * X/X0 per layer
+///    refit TRD track with tracklets
+///    Update ESD track if not TRD track provide by standard means  - to check in debug streamer
+Int_t           AliTRDtrackerV1::FollowInterpolationsTPCTOF(AliESDtrack &esdTrack){
+  //if (esdTrack.GetNumberOfTRDslices()<5) return 0; //TODO 0 debug line to remove
+  TTreeSRedirector *pstreamer = fkReconstructor->GetDebugStream(AliTRDrecoParam::kTracker);
+  enum {kHole=0x100,kBoundary=0x200};
+  const Float_t kStepSize=3;
+  const Float_t chi2Cut=49;
+  const Float_t vdriftCut=0.6;
+  const Float_t gainCut=0.8;
+  const double kBoundaryEps = 4;   // 4 cm dead zone
+  double boundaryEps = kBoundaryEps + AliTRDReconstructor::GetExtraBoundaryTolerance();
+  AliTRDcalibDB* const calibration = AliTRDcalibDB::Instance();
+  AliTRDtrackingChamber *chamber = NULL;
+  Double_t driftLength = .5*AliTRDgeometry::AmThick() + AliTRDgeometry::DrThick();
+  const AliTRDCalDet *exbDet = calibration->GetExBDet();
+  const AliTRDCalDet *t0Det=calibration->GetT0Det();
+  const AliTRDCalDet *vdDet=calibration->GetVdriftDet();
+  const AliTRDCalDet *gainDet=calibration->GetGainFactorDet();
+  //
+  static Float_t gainMeanRobust=gainDet->GetMeanRobust(0.75);
+  static Float_t gainRMSRobust=gainDet->GetRMSRobust(0.75);
+  static Float_t gainRMS=gainDet->GetRMS();
+  static Float_t exbMeanRobust=exbDet->GetMeanRobust(0.75);
+  static Float_t exbRMSRobust=exbDet->GetRMSRobust(0.75);
+  static Float_t exbRMS=exbDet->GetRMS();
+  static Float_t t0MeanRobust=t0Det->GetMeanRobust(0.75);
+  static Float_t t0RMSRobust=t0Det->GetRMSRobust(0.75);
+  static Float_t t0RMS=t0Det->GetRMSRobust(0.75);
+  static Float_t vdMeanRobust=vdDet->GetMeanRobust(0.75);
+  static Float_t vdRMSRobust=vdDet->GetRMSRobust(0.75);
+  static Float_t vdRMS=vdDet->GetRMSRobust(0.75);
+
+  /// TOF hit loop
+  Int_t nTOF = esdTrack.GetNTOFclusters();
+  if (nTOF<=0) return -2;
+  Int_t *tofArrayIndex=esdTrack.GetTOFclusterArray();
+  if (tofArrayIndex==NULL) return -1;
+  TClonesArray *tofclArray = esdTrack.GetESDEvent()->GetESDTOFClusters();
+  TClonesArray  paramLayer("AliExternalTrackParam",6);
+  paramLayer.ExpandCreateFast(6);
+  TClonesArray  seedLayer("AliTRDseedV1",6);
+  seedLayer.ExpandCreateFast(6);
+  //
+  AliTRDtrackV1 t(esdTrack);
+  AliTRDseedV1 seeds[6];
+  TVectorF tofPos(3);
+  Int_t sm=-1, stk=-1, det=-1;
+  for (Int_t iTOF=0; iTOF<nTOF; iTOF++) {
+    Int_t layerMask[6];
+    TVectorF x0Layer(6);
+    TVectorF xrhoLayer(6);
+    TVectorF ncl(6);
+    TVectorF vecDet(6);
+    TVectorF vecGain(6);
+    TVectorF vecExB(6);
+    TVectorF vecT0(6);
+    TVectorF vecVd(6);
+    TVectorF chamberStatus(6);
+
+    Double_t cov[3] = {1, 0, 1};
+    AliESDTOFCluster *tofcl = (AliESDTOFCluster *) tofclArray->At(tofArrayIndex[0]);
+    AliESDTOFHit *tofHit = tofcl->GetTOFHit(0);         // MI - for some reason one cluster could have more than one hitt - TO CONSULT
+    AliESDTOFMatch *tofMatch = tofcl->GetTOFMatch(0);       // MI - for some reason one cluster could have more than one hitt - TO CONSULT
+    Double_t xyz[3];
+    xyz[0] = tofcl->GetR() * TMath::Cos(tofcl->GetPhi());
+    xyz[1] = tofcl->GetR() * TMath::Sin(tofcl->GetPhi());
+    xyz[2] = tofcl->GetZ();
+    tofPos[0]=tofcl->GetR();
+    tofPos[1]=tofcl->GetPhi();
+    tofPos[2]=tofcl->GetZ();
+    Double_t sector=9*tofcl->GetPhi()/TMath::Pi();
+    if (sector<0) sector+=18;
+    sector=Int_t(sector);
+    Double_t alpha=(sector+0.5)*TMath::Pi()/9;
+    Double_t ylocal= tofcl->GetR() * TMath::Sin(tofcl->GetPhi()-alpha);
+    /// propagate param  to hit and update
+    AliExternalTrackParam paramOut(*(esdTrack.GetOuterParam()));
+    AliExternalTrackParam paramT(esdTrack);
+    paramOut.Rotate(tofcl->GetPhi());
+    paramT.Rotate(tofcl->GetPhi());
+    AliTrackerBase::PropagateTrackToBxByBz(&paramOut, tofcl->GetR(), esdTrack.GetMassForTracking(), kStepSize, kFALSE, 0.99);
+    AliTrackerBase::PropagateTrackToBxByBz(&paramT, tofcl->GetR(), esdTrack.GetMassForTracking(), kStepSize, kFALSE, 0.99);
+    paramOut.PropagateTo(tofcl->GetR(), esdTrack.GetBz());
+    paramT.PropagateTo(tofcl->GetR(), esdTrack.GetBz());
+    Double_t pos[2] = {0., tofcl->GetZ()};
+    Double_t chi2TOF = paramOut.GetPredictedChi2(pos, cov);
+    Double_t chi2TOFT = paramT.GetPredictedChi2(pos, cov);
+    AliExternalTrackParam paramOut0(paramOut);
+    AliExternalTrackParam paramT0(paramT);
+    paramOut.Update(pos, cov);
+    paramT.Update(pos, cov);
+    if ((AliTRDReconstructor::GetStreamLevel()&AliTRDReconstructor::kStreamInterpolateTPCTOF)>0){
+      (*pstreamer) << "interpolateTPCTOF"<<
+        "iTOF="<<iTOF<<
+        "tofPos.="<<&tofPos<<
+        "tofcl.="<<tofcl<<
+        "tofHit.="<<tofHit<<
+        "tofMatch.="<<tofMatch<<
+        "paramOut0.="<<&paramOut0<<
+        "paramOut.="<<&paramOut<<
+        "paramT0.="<<&paramT0<<
+        "paramT.="<<&paramT<<
+        "chi2TOF="<<chi2TOF<<
+        "chi2TOFT="<<chi2TOFT<<
+        "\n";
+    }
+    paramOut.Rotate(alpha);
+    paramT.Rotate(alpha);
+    if (TMath::Min(chi2TOF,chi2TOFT)>chi2Cut) continue;  /// skip the rest if chi2 too big
+    Int_t useT=0;
+    if (paramT.GetSigmaY2() < paramOut.GetSigmaY2()) {
+      // usually this is the case - error for paramT smaller running parameters are with TRD points
+      if (chi2TOFT < chi2TOF) useT |= 0x1;                                       // smaller chi2
+      if (TMath::Abs(paramT.GetY()) < TMath::Abs(paramOut.GetY())) useT |= 0x2;  // smaller delta rphi
+      if (TMath::Abs(paramT.GetY()) < 2) useT |= 0x4;                            // within acceptance
+    }
+    if (paramT.GetSigmaY2() > paramOut.GetSigmaY2()) {   // sometime "running parameters encounter material - error estimate can be bigger -accept if better absolute match
+      if (TMath::Abs(paramT.GetY()) < TMath::Abs(paramOut.GetY())) useT |= 0x8;   // smaller delta rphi
+      if (TMath::Abs(paramT.GetY()) < 2) useT |= 0x10;                            // within acceptance
+    }
+    if (chi2TOF>chi2Cut) useT|=0x20;
+    if (chi2TOFT>chi2Cut && chi2TOF<chi2Cut) useT=0;
+    if (useT==0) {
+      t.Set(paramOut.GetX(), paramOut.GetAlpha(), paramOut.GetParameter(), paramOut.GetCovariance());
+    }else{
+      t.Set(paramT.GetX(), paramT.GetAlpha(), paramT.GetParameter(), paramT.GetCovariance());
+    }
+    tofMatch->SetChi2TPCTOFS(TMath::Sqrt(chi2TOF));
+    tofMatch->SetChi2TPCTRDTOFS(TMath::Sqrt(chi2TOFT));
+    // Loop through the TRD layers
+    TGeoHMatrix *matrix = NULL;
+    Int_t nclAll=0;
+    for (Int_t ily=AliTRDgeometry::kNlayer-1,sm=-1, stk=-1, det=-1; ily>=0; ily--){
+      tofMatch->SetTRDncls(ily,0);
+      tofMatch->SetTRDstatus(ily,0);
+      ncl[ily]=0;
+      layerMask[ily]=0;
+      Double_t x(0.), y(0.), z(0.);
+      Double_t xyz0[3],xyz1[3];
+      t.GetXYZ(xyz0);
+      PropagateToX(t, fR[ily], AliTRDReconstructor::GetMaxStep());
+      AdjustSector(&t);
+      PropagateToX(t, fR[ily], AliTRDReconstructor::GetMaxStep());
+      *((AliExternalTrackParam*)paramLayer.At(ily))=t;
+      t.GetXYZ(xyz1);
+      z=xyz1[2];
+      y=t.GetY();
+      ///
+      Double_t param[7];
+      if(AliTracker::MeanMaterialBudget(xyz0, xyz1, param)<=0.) break;
+      xrhoLayer[ily]= param[0]*param[4];
+      x0Layer[ily] = param[1]; // Get mean propagation parameters
+      tofMatch->SetX0Layer(ily,param[1]);
+      tofMatch->SetRhoLayer(ily,param[0]*param[4]);
+      ///
+      //
+      sm = t.GetSector();
+      stk = fGeom->GetStack(z, ily);
+      det = stk>=0 ? AliTRDgeometry::GetDetector(ily, stk, sm) : -1;
+      vecDet[ily]=det;
+      if (det<0) continue;
+      chamberStatus[ily]=calibration->GetChamberStatus(det);
+      if (chamberStatus[ily]==1) tofMatch->SetTRDstatusBit(ily,AliESDTOFMatch::kActive);
+      vecGain[ily]=calibration->GetGainFactorAverage(det);
+      vecT0[ily] = calibration->GetT0Average(det);
+      vecExB[ily]=exbDet->GetValue(det);
+      vecVd[ily]=vdDet->GetValue(det);
+      if (vecVd[ily]/vdMeanRobust>vdriftCut) tofMatch->SetTRDstatusBit(ily,AliESDTOFMatch::kDriftOK);
+      if (vecGain[ily]/gainMeanRobust>gainCut) tofMatch->SetTRDstatusBit(ily,AliESDTOFMatch::kGainOK);
+      matrix = det>=0 ? fGeom->GetClusterMatrix(det) : NULL;
+      if (matrix==NULL) continue;
+      // retrieve rotation matrix for the current chamber
+      Double_t loc[] = {AliTRDgeometry::AnodePos()- driftLength, 0., 0.};
+      Double_t glb[] = {0., 0., 0.};
+      matrix->LocalToMaster(loc, glb);
+      //AliTRDseedV1 &tracklet=seeds[ily];
+      AliTRDseedV1 *ptrTracklet=(AliTRDseedV1 *)seedLayer.At(ily);
+      ptrTracklet->~AliTRDseedV1();
+      //
+      ptrTracklet = new(seedLayer.At(ily)) AliTRDseedV1(det);
+      ptrTracklet->SetReconstructor(fkReconstructor);
+      ///ptrTracklet->SetKink(esdTrack.IsKink());
+      ptrTracklet->SetPrimary(esdTrack.IsPrimary());
+      ptrTracklet->SetPadPlane(fGeom->GetPadPlane(ily, stk));
+      //set first approximation of radial position of anode wire corresponding to middle chamber y=0, z=0
+      // the uncertainty is given by the actual position of the tracklet (y,z) and chamber inclination
+      ptrTracklet->SetX0(glb[0]+driftLength);
+      if(!ptrTracklet->Init(&t)){
+        t.SetErrStat(AliTRDtrackV1::kTrackletInit,ily);
+        AliError("not possible to initialize");
+        continue;
+      }
+      // check data in chamber
+      if(!(chamber = fTrSec[sm].GetChamber(stk, ily))){
+        t.SetErrStat(AliTRDtrackV1::kNoClusters, ily);
+        chamberStatus[ily]=TMath::Nint(chamberStatus[ily])|0x200;
+        continue;
+      }
+      if(fGeom->IsOnBoundary(det, y, z, boundaryEps)){
+        t.SetErrStat(AliTRDtrackV1::kBoundary, ily);
+        chamberStatus[ily]=TMath::Nint(chamberStatus[ily])|0x100;
+
+        AliDebug(4, "Failed Track on Boundary");
+      }else{
+        tofMatch->SetTRDstatusBit(ily,AliESDTOFMatch::kDeadZoneOK);
+      }
+      if(!ptrTracklet->AttachClusters(chamber, kTRUE, kTRUE, fEventInFile)){
+        ptrTracklet->AttachClusters(chamber, kTRUE, kTRUE, fEventInFile);   //Debug line
+        t.SetErrStat(AliTRDtrackV1::kNoAttach, ily);
+         AliDebug(4, "No clusters found");
+         continue;
+      }
+      if(!ptrTracklet->FitRobust(fGeom->GetPadPlane(ily, stk), matrix, t.GetBz(), t.Charge(), 0, t.GetTgl())){
+        t.SetErrStat(AliTRDtrackV1::kNoFit, ily);
+        AliDebug(4, "Failed Tracklet Fit");
+        continue;
+      }
+      tofMatch->SetTRDncls(ily,ptrTracklet->GetN());
+      ncl[ily]=ptrTracklet->GetN();
+      nclAll+=ptrTracklet->GetN();
+      layerMask[ily]=t.GetStatusTRD(ily);
+      t.SetTracklet(ptrTracklet,ily);
+//      if ((AliTRDReconstructor::GetStreamLevel()&AliTRDReconstructor::kStreamInterpolateTPCTOFTracklet)>0){
+//        (*pstreamer) << "interpolateTPCTOFTracklet"<<
+//                     "iTOF="<<iTOF<<
+//                     "layer="<<ily<<
+//                     "chamberStatus="<<chamberStatus[ily]<<
+//                     "tracklet.="<<ptrTracklet<<                // tracklet
+//                     "statusTRD="<<layerMask[ily]<<
+//                     "param.="<<paramLayer.At(ily)<<
+//                     "\n";
+//      }
+    }
+    if ((AliTRDReconstructor::GetStreamLevel()&AliTRDReconstructor::kStreamInterpolateTPCTOFTrack)>0){
+      AliESDfriendTrack *ft = (AliESDfriendTrack *)esdTrack.GetFriendTrack();
+      AliKalmanTrack * trdOut= (AliKalmanTrack *) ft->GetTRDtrack();
+      Int_t nTracks=esdTrack.GetESDEvent()->GetNumberOfTracks();
+      Int_t run=esdTrack.GetESDEvent()->GetRunNumber();
+      (*pstreamer) << "interpolateTPCTOFTrack"<<
+                   "iTOF="<<iTOF<<
+                   "run="<<run<<
+                   "nTracks="<<nTracks<<
+                   "useT="<<useT<<
+                   "nclAll="<<nclAll<<
+                   "esdTrack.="<<&esdTrack<<
+                   "trdOut.="<<trdOut<<
+                   "tofPos.="<<&tofPos<<
+                   "vecDet.="<<&vecDet<<
+                   "vecGain.="<<&vecGain<<
+                   "vecExB.="<<&vecExB<<
+                   "vecT0.="<<&vecT0<<
+                   "vecVd.="<<&vecVd<<
+                   "chamberStatus.="<<&chamberStatus<<
+                   "gainMeanRobust="<<gainMeanRobust<<
+                   "gainRMSRobust="<<gainRMSRobust<<
+                   "gainRMS="<<gainRMS<<
+                   "exbMeanRobust="<<exbMeanRobust<<
+                   "exbRMSRobust="<<exbRMSRobust<<
+                   "exbRMS="<<exbRMS<<
+                   "t0MeanRobust="<<t0MeanRobust<<
+                   "t0RMSRobust="<<t0RMSRobust<<
+                   "t0RMS="<<t0RMS<<
+                   "vdMeanRobust="<<vdMeanRobust<<
+                   "vdRMSRobust="<<vdRMSRobust<<
+                   "vdRMS="<<vdRMS<<
+                   "ncl.="<<&ncl<<
+                   "x0Layer.="<<&x0Layer<<
+                   "rhoLayer.="<<&xrhoLayer<<
+                   "t.="<<&t<<
+                   "trdOut.="<<trdOut<<
+                   "tofcl.="<<tofcl<<
+                   "tofHit.="<<tofHit<<
+                   "tofMatch.="<<tofMatch<<
+                   "paramOut0.="<<&paramOut0<<
+                   "paramOut.="<<&paramOut<<
+                   "paramT0.="<<&paramT0<<
+                   "paramT.="<<&paramT<<
+                   "chi2TOF="<<chi2TOF<<
+                   "chi2TOFT="<<chi2TOFT<<
+                   "paramLayer="<<&paramLayer<<
+                   "seedLayer="<<&seedLayer<<
+                   "\n";
+    }
+  }
+  return 0;
 }

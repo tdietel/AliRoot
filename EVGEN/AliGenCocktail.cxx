@@ -33,7 +33,11 @@
 #include "AliRun.h"
 #include "AliLog.h"
 #include "AliMC.h"
+#include "AliHeader.h"
+#include "AliVertexGenFile.h"
 #include "AliGenCocktailEventHeader.h"
+#include "AliGenHijingEventHeader.h"
+#include "AliGenDPMjetEventHeader.h"
 
 ClassImp(AliGenCocktail)
 
@@ -221,11 +225,30 @@ void AliGenCocktail::Generate()
       //
       if (entry->Formula() != 0)
       {
-        if (!collentry) {
+        AliCollisionGeometry* coll = NULL;
+	
+	if (!collentry) {
+	  const AliVertexGenFile* vtxGen =  (AliVertexGenFile*)gAlice->GetMCApp()->Generator()->GetVertexGenerator();
+	  if(vtxGen){
+	    const AliHeader* hBg = vtxGen->GetHeader();
+	    if (hBg) {
+	      AliGenEventHeader* genHeader = hBg->GenEventHeader();
+	      coll = dynamic_cast<AliCollisionGeometry*>(genHeader);
+	      if (!coll) {
+		AliFatalF("Header %s does not provide collision geometry",genHeader->IsA()->GetName());
+	      }
+	    }
+	  }
+	}
+	else{
+	  coll = (collentry->Generator())->CollisionGeometry();
+	}
+	
+	if (!coll) {
           Fatal("Generate()", "No Collision Geometry Provided");
           return;
         }
-        AliCollisionGeometry* coll = (collentry->Generator())->CollisionGeometry();
+	
         Float_t b  = coll->ImpactParameter();
         Int_t nsig = Int_t(entry->Formula()->Eval(b));
         Int_t bin = entry->Bin() - 100;
@@ -237,6 +260,8 @@ void AliGenCocktail::Generate()
           ntimes = nsig;
         }
       }
+      AliInfo(Form("Generator %d: %s; ntimes=%d; Vertex (%f,%f,%f) cm   Time %f ns",
+		   igen,gen->ClassName(),ntimes,fVertex.At(0), fVertex.At(1), fVertex.At(2), fTime*1e9));
       gen->SetVertex(fVertex.At(0), fVertex.At(1), fVertex.At(2), fTime);
 
       gen->GenerateN(ntimes);
@@ -266,6 +291,7 @@ void AliGenCocktail::Generate()
 
   // Event Vertex
   fHeader->SetPrimaryVertex(eventVertex);
+  fHeader->SetInteractionTime(fTime);
   fHeader->CalcNProduced();
   if (fContainer) {
     fHeader->SetName(fName);

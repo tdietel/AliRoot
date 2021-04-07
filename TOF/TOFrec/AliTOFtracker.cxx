@@ -52,6 +52,7 @@
 #include "AliTOFGeometry.h"
 #include "AliTOFtracker.h"
 #include "AliTOFtrack.h"
+#include "TTreeStream.h"
 
 extern TGeoManager *gGeoManager;
 //extern TROOT *gROOT;
@@ -61,6 +62,7 @@ ClassImp(AliTOFtracker)
 
 //_____________________________________________________________________________
 AliTOFtracker::AliTOFtracker():
+  fDebugStreamer(0x0),
   fkRecoParam(0x0),
   fGeom(0x0),
   fN(0),
@@ -106,6 +108,10 @@ AliTOFtracker::AliTOFtracker():
   }
   */
   InitCheckHists();
+  if (AliTOFReconstructor::StreamLevel()>0) {
+    fDebugStreamer = new TTreeSRedirector("TOFdebug.root","recreate");
+    AliTOFReconstructor::SetDebugStreamer(fDebugStreamer);
+  }
 
 }
 //_____________________________________________________________________________
@@ -162,6 +168,7 @@ AliTOFtracker::~AliTOFtracker() {
      }
      }
   */
+  if (fDebugStreamer) delete fDebugStreamer;
 
 }
 //_____________________________________________________________________________
@@ -384,7 +391,7 @@ Int_t AliTOFtracker::PropagateBack(AliESDEvent * const event) {
   //Make TOF PID
   // Now done in AliESDpid
   // fPid->MakePID(event,timeZero);
-
+  MakeGammaSeed();
   fSeeds->Clear();
   //fTracks->Delete();
   fTracks->Clear();
@@ -870,9 +877,37 @@ void AliTOFtracker::MatchTracks( Int_t mLastStep){
     Float_t  mindistX=stepSize;
     for (Int_t iclus= 0; iclus<nfound;iclus++) {
       AliTOFtrackPoint *matchableTOFcluster = (AliTOFtrackPoint*)fTOFtrackPoints->At(iclus);
+      if (fDebugStreamer && (AliTOFReconstructor::StreamLevel())>0){
+        Float_t mindistNew = matchableTOFcluster->Distance();
+        Float_t mindistYNew = matchableTOFcluster->DistanceY();
+        Float_t mindistZNew = matchableTOFcluster->DistanceZ();
+        Float_t mindistXNew = matchableTOFcluster->DistanceX();
+        AliTOFcluster *c=fClusters[matchableTOFcluster->Index()];
+        Int_t clindex=matchableTOFcluster->Index();
+        (*fDebugStreamer)<<"matchNearest"<<
+                          "mLastStep="<<mLastStep<<
+                          "c.="<<c<<
+                          "clindex="<<clindex<<
+                         "nfound="<<nfound<<
+                         "mindist="<<mindist<<
+                         "iclus="<<iclus<<
+                         "mindistNew="<<mindistNew<<
+                         "mindist="<<mindist<<
+                         "mindistX="<<mindistX<<
+                         "mindistXNew="<<mindistXNew<<
+                         "mindistY="<<mindistY<<
+                         "mindistYNew="<<mindistYNew<<
+                         "mindistZ="<<mindistZ<<
+                         "mindistZNew="<<mindistZNew<<
+                         "\n";
+      }
       //if ( matchableTOFcluster->Distance()<mindist ) {
-      if ( TMath::Abs(matchableTOFcluster->DistanceX())<TMath::Abs(mindistX) &&
-	   TMath::Abs(matchableTOFcluster->DistanceX())<=stepSize ) {
+
+      //if ( TMath::Abs(matchableTOFcluster->DistanceX())<TMath::Abs(mindistX) &&
+	   //TMath::Abs(matchableTOFcluster->DistanceX())<=stepSize ) {
+  if ( TMath::Abs(matchableTOFcluster->Distance())<TMath::Abs(mindist) &&
+	    TMath::Abs(matchableTOFcluster->DistanceX())<=stepSize ) {                     /// MI - Temporary BUG FIX - use 3D distance instead of the localX (radial) distance
+
 	mindist = matchableTOFcluster->Distance();
 	mindistZ = matchableTOFcluster->DistanceZ(); // Z distance in the
 						     // RF of the hit pad
@@ -1090,8 +1125,12 @@ void AliTOFtracker::MatchTracks( Int_t mLastStep){
     }
     delete trackTOFout;
   }
-
-
+  for (Int_t i=0; i<fNTOFmatched;i++) {
+    AliESDTOFCluster *tofCl = GetESDTOFCluster(i);
+    if (tofCl == NULL) {
+      AliDebug(4, "No cluster associated");
+    }
+  }
   for (Int_t ii=0; ii<4; ii++) delete [] trackPos[ii];
   delete [] clind;
  
@@ -1183,7 +1222,10 @@ Int_t AliTOFtracker::LoadClusters(TTree *cTree) {
     fHDigClusMap->Fill(zindex,phiindex);
     fHDigClusTime->Fill(time);
     fHDigClusToT->Fill(tot);
-
+    //AliESDTOFCluster * tofCl=GetESDTOFCluster(fNTOFmatched);
+    //if (tofCl==NULL){
+    //  AliDebug(4,"No cluster associated");
+    //}
     fNTOFmatched++; // RS: Actually number of clusters
     /* RS?
     if(fNTOFmatched < 20000){
@@ -1463,4 +1505,107 @@ AliESDTOFCluster* AliTOFtracker::GetESDTOFCluster(int clID)
   //
   return clESD;
   //
+}
+
+
+void AliTOFtracker::MakeGammaSeed() {
+    // find the gamma candidate clusters
+    const Float_t kTimeOffset = 0.; // time offset for tracking algorithm [ps]
+    const AliESDVertex * vertex = fESDEv->GetPrimaryVertex();
+    Int_t run=fESDEv->GetRunNumber();
+    Int_t event=fESDEv->GetEventNumberInFile();
+    Double_t timeStamp= fESDEv->GetTimeStampCTPBCCorr();
+    ULong64_t orbitID      = (ULong64_t)fESDEv->GetOrbitNumber();
+    ULong64_t bunchCrossID = (ULong64_t)fESDEv->GetBunchCrossNumber();
+    ULong64_t periodID     = (ULong64_t)fESDEv->GetPeriodNumber();
+    ULong64_t gid = ((periodID << 36) | (orbitID << 12) | bunchCrossID);
+
+    Double_t xyzVertex[3];
+    vertex->GetXYZ(xyzVertex);
+    Int_t nc=0;
+    const Float_t dPhiCut = 0.34;
+    const Float_t dZCut   = 5.;
+    Float_t xyz0[3], xyz1[3];
+    for (Int_t i0=0; i0<fN; i0++) {
+      AliTOFcluster *c0 = fClusters[i0];
+      if (!c0->GetStatus()) continue;
+      c0->GetGlobalXYZ(xyz0);
+      Float_t phi0= TMath::ATan2(xyz0[1],xyz0[0]);
+      Float_t length0=(xyz0[0]-xyzVertex[0])*(xyz0[0]-xyzVertex[0])+(xyz0[1]-xyzVertex[1])*(xyz0[1]-xyzVertex[1])+(xyz0[2]-xyzVertex[2])*(xyz0[2]-xyzVertex[2]);
+      length0=TMath::Sqrt(length0);
+      Double_t tof0=AliTOFGeometry::TdcBinWidth()*c0->GetTDC()+kTimeOffset; // in ps
+      if (fDebugStreamer && (AliTOFReconstructor::StreamLevel() & AliTOFReconstructor::kStreamSingle)>0){
+        (*fDebugStreamer)<<"hit0"<<
+        "run="<<run<<
+        "event="<<event<<
+        "timeStamp="<<timeStamp<<
+        "gid="<<gid<<
+        "fNTOFmatched="<<fNTOFmatched<<
+        "nhits="<<fN<<
+        "c0.="<<c0<<
+        "lentgh0="<<length0<<
+        "tof0="<<tof0<<
+        "\n";
+      }
+      for (Int_t i1=FindClusterIndex(c0->GetZ()-dZCut); i1<fN; i1++) {
+        if (i0==i1) continue;
+        AliTOFcluster *c1 = fClusters[i1];
+        if (!c1->GetStatus()) continue;
+        if (c1->GetZ()-c0->GetZ()>dZCut) break;
+        c1->GetGlobalXYZ(xyz1);
+        Float_t phi1= TMath::ATan2(xyz1[1],xyz1[0]);
+        Double_t dphi=phi0-phi1;
+        if (TMath::Abs(dphi) > dPhiCut) continue;
+        Float_t length1=(xyz1[0]-xyzVertex[0])*(xyz1[0]-xyzVertex[0])+(xyz1[1]-xyzVertex[1])*(xyz1[1]-xyzVertex[1])+(xyz1[2]-xyzVertex[2])*(xyz1[2]-xyzVertex[2]);
+        length1=TMath::Sqrt(length1);
+        Double_t tof1=AliTOFGeometry::TdcBinWidth()*c1->GetTDC()+kTimeOffset; // in ps
+        Double_t dist3D=(xyz1[0]-xyz0[0])*(xyz1[0]-xyz0[0])+(xyz1[1]-xyz0[1])*(xyz1[1]-xyz0[1])+(xyz1[2]-xyz0[2])*(xyz1[2]-xyz0[2]);
+        dist3D=TMath::Sqrt(dist3D);
+        Float_t dTime=tof1-tof0;
+        AliTOFcluster *h0, *h1;
+        Float_t l0=length0, l1=length1;
+        Float_t t0=tof0, t1=tof1;
+        if (c0->GetR()<c1->GetR()){
+          h0=c0; h1=c1;
+        }else{
+          h0=c1; h1=c0;
+          dphi*=-1;
+          dTime*=-1;
+          l0=length1; l1=length0;
+          t0=tof0; t1=tof1;
+        }
+        Float_t dR=h1->GetR()-h0->GetR();
+        if (fDebugStreamer && (AliTOFReconstructor::StreamLevel() & AliTOFReconstructor::kStreamV0)>0){
+          (*fDebugStreamer)<<"gammaSeed"<<
+            "run="<<run<<
+            "event="<<event<<
+            "timeStamp="<<timeStamp<<
+            "gid="<<gid<<
+            "fNTOFmatched="<<fNTOFmatched<<
+            "nhits="<<fN<<
+            "dphi="<<dphi<<
+            "dR="<<dR<<
+            "dist3D="<<dist3D<<
+            "fTime="<<dTime<<
+            "h0.="<<h0<<
+            "l0="<<l0<<
+            "t0="<<t0<<
+            "h1.="<<h1<<
+            "l1="<<l1<<
+            "t1="<<t1<<
+          "\n";
+        }
+      }
+
+      }
+
+}
+
+void AliTOFtracker::SetAliasStreamer(TTree *tree) {
+  tree->SetAlias("v1","l1/t1/0.03");
+  tree->SetAlias("v0","l0/t0/0.03");
+  tree->SetAlias("dz","h0.fZ-h1.fZ");
+  tree->SetAlias("dx","h0.fX-h1.fX");
+  tree->SetAlias("dy","h0.fY-h1.fY");
+  tree->SetAlias("dL","sqrt(dx**2+dy**2+dz**2)");
 }

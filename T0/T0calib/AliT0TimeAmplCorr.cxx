@@ -57,6 +57,7 @@
 
 #include "AliT0TimeAmplCorr.h"
 #include <Riostream.h>
+#include <TObjString.h>
 
 using std::cout;
 using std::endl;
@@ -348,7 +349,7 @@ Int_t AliT0TimeAmplCorr::ConnectSourceFile(TString filename, TString treepathnam
 
     }
 
-
+    return 1;
 }
 
 /*******************************************************************************************************************/
@@ -400,7 +401,7 @@ Int_t AliT0TimeAmplCorr::SetNewQTCcoefficients(TString filename)
             if((runMax - runMin) < minRUNdiff) enteryChoosen = enteryForMeanValues;
             tree_coef->GetEntry(enteryChoosen);
 
-            for(Int_t pmt = 0; pmt <= NPMT0; pmt++)
+            for(Int_t pmt = 0; pmt < NPMT0; pmt++)
             {
                 fNewQTCa[pmt] = coeffA[pmt];
                 fNewQTCb[pmt] = coeffB[pmt];
@@ -1243,9 +1244,8 @@ Int_t AliT0TimeAmplCorr::GetRAWmeanValuesFromOCDB()
         fPedestalQTC[pmt] = T0CalTimeEq->GetCFDvalue(pmt,3);
         if(fVerbose >= 4)cout <<Form("Pedestal QTC %s from OCDB: %i",pmtname.Data(), fPedestalQTC[pmt])<<endl;
     }
-
-    return 1;
 */
+    return 1;
 }
 
 /*******************************************************************************************************************/

@@ -95,6 +95,7 @@ AliAnalysisDataContainer::AliAnalysisDataContainer(const char *name, TClass *typ
 /// Default constructor.
 
    SetTitle(fType->GetName());
+   if (fType->InheritsFrom("AliDirList")) SetDirList(true);
 }
 
 //______________________________________________________________________________
@@ -462,7 +463,9 @@ void AliAnalysisDataContainer::ImportData(AliAnalysisDataWrapper *pack)
       fDataReady = kTRUE;
       // Imported wrappers do not own data anymore (AG 13-11-07)
       pack->SetDeleteData(kFALSE);
-   }   
+      // Imported data is read from file, the container must own it
+      SetDataOwned(true);
+   }
 }      
       
 ClassImp (AliAnalysisDataWrapper)
@@ -554,16 +557,16 @@ AliAnalysisFileDescriptor::AliAnalysisFileDescriptor(const TFile *file)
                            fOpenTime(0.), fProcessingTime(0.), fThroughput(0.), fTimer()
 {
 // Normal constructor
-   if (file->InheritsFrom("TAlienFile")) {
-      fLfn =(const char*)gROOT->ProcessLine(Form("((TAlienFile*)%p)->GetLfn();", file));
-      fGUID =(const char*)gROOT->ProcessLine(Form("((TAlienFile*)%p)->GetGUID();", file));
-      fUrl =(const char*)gROOT->ProcessLine(Form("((TAlienFile*)%p)->GetUrl();", file));
-      fPfn =(const char*)gROOT->ProcessLine(Form("((TAlienFile*)%p)->GetPfn();", file));
-      fSE = (const char*)gROOT->ProcessLine(Form("((TAlienFile*)%p)->GetSE();", file));
-      fImage = (Int_t)gROOT->ProcessLine(Form("((TAlienFile*)%p)->GetImage();", file));
-      fNreplicas = (Int_t)gROOT->ProcessLine(Form("((TAlienFile*)%p)->GetNreplicas();", file));
-      fOpenedAt = gROOT->ProcessLine(Form("((TAlienFile*)%p)->GetOpenTime();", file));
-      gROOT->ProcessLine(Form("((AliAnalysisFileDescriptor*)%p)->SetOpenTime(((TAlienFile*)%p)->GetElapsed());", this, file));
+   if (file->InheritsFrom("TAliceFile")) {
+      fLfn =(const char*)gROOT->ProcessLine(Form("((TAliceFile*)%p)->GetLfn();", file));
+      fGUID =(const char*)gROOT->ProcessLine(Form("((TAliceFile*)%p)->GetGUID();", file));
+      fUrl =(const char*)gROOT->ProcessLine(Form("((TAliceFile*)%p)->GetUrl();", file));
+      fPfn =(const char*)gROOT->ProcessLine(Form("((TAliceFile*)%p)->GetPfn();", file));
+      fSE = (const char*)gROOT->ProcessLine(Form("((TAliceFile*)%p)->GetSE();", file));
+      fImage = (Int_t)gROOT->ProcessLine(Form("((TAliceFile*)%p)->GetImage();", file));
+      fNreplicas = (Int_t)gROOT->ProcessLine(Form("((TAliceFile*)%p)->GetNreplicas();", file));
+      fOpenedAt = gROOT->ProcessLine(Form("((TAliceFile*)%p)->GetOpenTime();", file));
+      gROOT->ProcessLine(Form("((AliAnalysisFileDescriptor*)%p)->SetOpenTime(((TAliceFile*)%p)->GetElapsed());", this, file));
    } else {
       fLfn = file->GetName();
       fPfn = file->GetName();

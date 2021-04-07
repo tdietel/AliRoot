@@ -54,7 +54,11 @@ public:
   Double_t GetNumberOfSigmas( const AliVTrack* track, AliPID::EParticleType species) const;
   
   Double_t GetSignalDelta( const AliVTrack* track, AliPID::EParticleType species, Bool_t ratio=kFALSE) const;
+
+  Float_t GetExpectedSignal(const AliVTrack* track, AliPID::EParticleType species) const;
   
+  Float_t GetExpectedSigma(const AliVTrack* track, AliPID::EParticleType species) const;
+
   Float_t GetNumberOfSigmas(Float_t mom, Float_t signal, AliPID::EParticleType type, Int_t nPtsForPid=4, Bool_t isSA=kFALSE) const {
     if(type==AliPID::kDeuteron && mom<0.4) return -999.;
     if(type==AliPID::kTriton && mom<0.55) return -999.;
@@ -63,7 +67,8 @@ public:
     return (signal - bethe)/GetResolution(bethe,nPtsForPid,isSA,mom,type);
   }
   Int_t GetParticleIdFromdEdxVsP(Float_t mom, Float_t signal, Bool_t isSA=kFALSE) const;
-  
+  const Bool_t GetUseInterpolatedMomentum() const {return fUseInterpolatedMomentum;}
+  void   SetUseInterpolatedMomentum(Bool_t useInterpolatedMomentum){fUseInterpolatedMomentum=useInterpolatedMomentum;}
 private:
   
   
@@ -86,9 +91,10 @@ private:
   Double_t fResolTPCITSDeu4[3]; // deuteron resolutions vs. p for tracks with 4 SDD/SSD points
   Double_t fResolTPCITSTri3[3]; // triton resolutions vs. p for tracks with 3 SDD/SSD points
   Double_t fResolTPCITSTri4[3]; // triton resolutions vs. p for tracks with 4 SDD/SSD points
+  Bool_t   fUseInterpolatedMomentum; // swith to use interpolated momentum
 
   Double_t Bethe(Double_t bg, const Double_t * const par, Bool_t isNuclei) const;
-  ClassDef(AliITSPIDResponse,5)   // ITS PID class
+  ClassDef(AliITSPIDResponse,6)   // ITS PID class
 };
 
 #endif

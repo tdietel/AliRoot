@@ -22,6 +22,7 @@ include_directories(${AliRoot_SOURCE_DIR}/HLT/VZERO)
 # Additional include folders in alphabetical order except ROOT
 include_directories(SYSTEM ${ROOT_INCLUDE_DIR})
 include_directories(${AliRoot_SOURCE_DIR}/HLT/BASE
+                    ${AliRoot_SOURCE_DIR}/HLT/BASE/util
                     ${AliRoot_SOURCE_DIR}/RAW/RAWDatabase
                     ${AliRoot_SOURCE_DIR}/RAW/RAWDatarec
                     ${AliRoot_SOURCE_DIR}/STEER/CDB
@@ -48,7 +49,7 @@ generate_dictionary_flat("${MODULE}" "${MODULE}LinkDef.h" "${HDRS}" "${incdirs}"
 
 # Generate the ROOT map
 # Dependecies
-set(LIBDEPS STEERBase STEER ESD CDB RAWDatabase RAWDatarec HLTbase VZEROrec VZERObase)
+set(LIBDEPS STEERBase STEER ESD CDB RAWDatabase RAWDatarec HLTbase VZEROrec VZERObase AliHLTUtil)
 generate_rootmap("${MODULE}" "${LIBDEPS}" "${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}LinkDef.h")
 
 # Add a library to the project using the specified source files

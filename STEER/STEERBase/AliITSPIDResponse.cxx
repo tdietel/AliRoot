@@ -25,6 +25,7 @@
 #include "AliVTrack.h"
 #include "AliITSPIDResponse.h"
 #include "AliITSPidParams.h"
+#include "AliPIDResponse.h"
 #include "AliExternalTrackParam.h"
 
 ClassImp(AliITSPIDResponse)
@@ -35,7 +36,8 @@ AliITSPIDResponse::AliITSPIDResponse(Bool_t isMC):
   fKp2(4.95),
   fKp3(0.312),
   fKp4(2.14),
-  fKp5(0.82)
+  fKp5(0.82),
+  fUseInterpolatedMomentum(kFALSE)
 {
   if(!isMC){
     fBBtpcits[0]=0.73;
@@ -238,7 +240,7 @@ Double_t AliITSPIDResponse::Bethe(Double_t p, Double_t mass, Bool_t isSA) const 
   if (!foundMatchingSpecies)
     printf("Error AliITSPIDResponse::Bethe: Mass does not match any species. Assuming pion! Note that this function is deprecated!\n");
 
-    return Bethe(p,species,isSA);
+  return Bethe(p,species,isSA);
 }
 
 //_________________________________________________________________________
@@ -476,7 +478,10 @@ Double_t AliITSPIDResponse::GetNumberOfSigmas( const AliVTrack* track, AliPID::E
   //TODO: in case of the electron, use the SA parametrisation,
   //      this needs to be changed if ITS provides a parametrisation
   //      for electrons also for ITS+TPC tracks
-  return GetNumberOfSigmas(mom,dEdx,type,nPointsForPid,isSA || (type==AliPID::kElectron));
+  const Float_t kInterpolPosition=0.75;
+  Double_t momInner = (track->GetInnerParam()) ? track->GetInnerParam()->P():track->P();
+  Double_t momITS=(fUseInterpolatedMomentum) ? AliPIDResponse::interpolateP(track->P(),momInner,AliPID::ParticleMass(type),kInterpolPosition, AliPID::ParticleCharge(type)):mom;
+  return GetNumberOfSigmas(momITS,dEdx,type,nPointsForPid,isSA || (type==AliPID::kElectron));
 }
 
 //_________________________________________________________________________
@@ -497,14 +502,59 @@ Double_t AliITSPIDResponse::GetSignalDelta( const AliVTrack* track, AliPID::EPar
   //TODO: in case of the electron, use the SA parametrisation,
   //      this needs to be changed if ITS provides a parametrisation
   //      for electrons also for ITS+TPC tracks
-
-  const Float_t bethe = Bethe(mom,type, isSA || (type==AliPID::kElectron))*chargeFactor;
+  const Float_t kInterpolPosition=0.75;
+  Double_t momInner = (track->GetInnerParam()) ? track->GetInnerParam()->P():track->P();
+  Double_t momITS=(fUseInterpolatedMomentum) ?AliPIDResponse::interpolateP(track->P(),momInner,AliPID::ParticleMass(type),kInterpolPosition, AliPID::ParticleCharge(type)):mom;
+  const Float_t bethe = Bethe(momITS,type, isSA || (type==AliPID::kElectron))*chargeFactor;
 
   Double_t delta=-9999.;
   if (!ratio) delta=dEdx-bethe;
   else if (bethe>1.e-20) delta=dEdx/bethe;
 
   return delta;
+}
+
+//_________________________________________________________________________
+Float_t AliITSPIDResponse::GetExpectedSignal(const AliVTrack* track, AliPID::EParticleType type) const
+{
+  //
+  // Signal - expected
+  //
+  const Float_t mom=track->P();
+  const Double_t chargeFactor = TMath::Power(AliPID::ParticleCharge(type),2.);
+  Bool_t isSA=kTRUE;
+  if( track->GetStatus() & AliVTrack::kTPCin ) isSA=kFALSE;
+
+  //TODO: in case of the electron, use the SA parametrisation,
+  //      this needs to be changed if ITS provides a parametrisation
+  //      for electrons also for ITS+TPC tracks
+
+  const Float_t bethe = Bethe(mom,type, isSA || (type==AliPID::kElectron))*chargeFactor;
+
+  return bethe;
+}
+
+//_________________________________________________________________________
+Float_t AliITSPIDResponse::GetExpectedSigma(const AliVTrack* track, AliPID::EParticleType type) const
+{
+  const UChar_t clumap=track->GetITSClusterMap();
+  Int_t nPointsForPid=0;
+  for(Int_t i=2; i<6; i++){
+    if(clumap&(1<<i)) ++nPointsForPid;
+  }
+  const Float_t mom = track->P();
+
+  //check for ITS standalone tracks
+  //TODO: in case of the electron, use the SA parametrisation,
+  //      this needs to be changed if ITS provides a parametrisation
+  //      for electrons also for ITS+TPC tracks
+  Bool_t isSA = kTRUE;
+  if( track->GetStatus() & AliVTrack::kTPCin ) isSA = (type==AliPID::kElectron);
+
+  const Float_t chargeFactor = Float_t(TMath::Power(AliPID::ParticleCharge(type),2.));
+  const Float_t bethe = Bethe(mom,type,isSA)*chargeFactor;
+
+  return GetResolution(bethe,nPointsForPid,isSA,mom,type);
 }
 
 //_________________________________________________________________________

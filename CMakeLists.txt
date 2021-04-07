@@ -71,7 +71,7 @@ if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RELWITHDEBINFO)
 endif(NOT CMAKE_BUILD_TYPE)
 string(TOUPPER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE)
-set(CMAKE_ALLOWED_BUILD_TYPES DEBUG RELEASE RELWITHDEBINFO COVERAGE)
+set(CMAKE_ALLOWED_BUILD_TYPES DEBUG RELEASE RELWITHDEBINFO COVERAGE CUSTOM_EXTERNAL)
 list(FIND CMAKE_ALLOWED_BUILD_TYPES "${CMAKE_BUILD_TYPE}" VALID_BUILD_TYPE)
 if(${VALID_BUILD_TYPE} EQUAL -1)
   string(REPLACE ";" ", " CMAKE_ALLOWED_BUILD_TYPES_FLAT "${CMAKE_ALLOWED_BUILD_TYPES}")
@@ -116,6 +116,28 @@ include(cmake/modules/MacroOptionalAddSubdirectory.cmake)
 if (NOT CMAKE_SYSTEM_NAME STREQUAL Windows)
   set(CMAKE_SHARED_LIBRARY_SUFFIX .so)
 endif (NOT CMAKE_SYSTEM_NAME STREQUAL Windows)
+
+if(NOT ALIROOT_ONLINE_MODE)
+  # Not in "online mode": optimize install speed on macOS and fix install dirs
+
+  # Be sure about where libraries and binaries are put
+  set(LIBRARY_OUTPUT_PATH "${CMAKE_BINARY_DIR}/lib")
+  set(EXECUTABLE_OUTPUT_PATH "${CMAKE_BINARY_DIR}/bin")
+
+  # Build targets with install rpath on Mac to dramatically speed up installation
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+  list(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_PREFIX}/lib" isSystemDir)
+  if("${isSystemDir}" STREQUAL "-1")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+      message(STATUS "RPATH settings ***")
+      set(CMAKE_INSTALL_RPATH "@loader_path/../lib")
+    endif()
+  endif()
+  if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+  endif()
+  unset(isSystemDir)
+endif()
 
 # HLT/ZMQ and HLT/BASE/util need X11
 find_package(X11)
@@ -299,25 +321,17 @@ else()
   include(CMakeALICE)
 
   # If no Fortran, i.e on Windows
-  # We need to specify ROOT fortran
-  # (f95 comes before gfortran in default module)
   include(CheckLanguage)
 
   if(DISABLE_FORTRAN)
     message(STATUS "Fortran support disabled by user")
   else(DISABLE_FORTRAN)
-    if(ROOT_FORTRAN)
-      message(STATUS "Using the Fortran compiler defined by ROOT configuration: ${ROOT_FORTRAN}")
-      set(CMAKE_Fortran_COMPILER ${ROOT_FORTRAN})
-    else()
-      message(STATUS "Using default system Fortran compiler")
-    endif(ROOT_FORTRAN)
-
     check_language(Fortran)
     if(CMAKE_Fortran_COMPILER)
       enable_language(Fortran OPTIONAL)
+      message(STATUS "Fortran compiler is ${CMAKE_Fortran_COMPILER}")
     else()
-      set(DISABLE_FORTRAN FALSE)
+      set(DISABLE_FORTRAN TRUE)
     endif()
   endif(DISABLE_FORTRAN)
 
@@ -325,7 +339,9 @@ else()
   find_package(FASTJET)
 
   # ZEROMQ
-  find_package(ZeroMQ)
+  if(ROOT_VERSION_MAJOR GREATER 5)
+    find_package(ZeroMQ)
+  endif()
 
   # Generating the AliRoot-config.cmake file
   configure_file(${PROJECT_SOURCE_DIR}/cmake/AliRoot-config.cmake.in ${CMAKE_BINARY_DIR}/version/AliRoot-config.cmake @ONLY)
@@ -436,25 +452,6 @@ else()
     string(REPLACE ";" " " ALIROOT_MODULES_NOONLINE_FLAT "${ALIROOT_MODULES_NOONLINE}")
     message(WARNING "Online build detected: disabling unneeded modules: ${ALIROOT_MODULES_NOONLINE_FLAT}")
     list(APPEND EXCLUDE_MODULES "${ALIROOT_MODULES_NOONLINE}")
-  else(ALIROOT_ONLINE_MODE)
-    # Not in "online mode": optimize install speed on macOS and fix install dirs
-
-    # Be sure about where libraries and binaries are put
-    set(LIBRARY_OUTPUT_PATH "${CMAKE_BINARY_DIR}/lib")
-    set(EXECUTABLE_OUTPUT_PATH "${CMAKE_BINARY_DIR}/bin")
-
-    # Build targets with install rpath on Mac to dramatically speed up installation
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-    list(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_PREFIX}/lib" isSystemDir)
-    if("${isSystemDir}" STREQUAL "-1")
-      if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-        set(CMAKE_INSTALL_RPATH "@loader_path/../lib")
-      endif()
-    endif()
-    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-      set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
-    endif()
-    unset(isSystemDir)
   endif()
 
   # Selectively exclude modules (with -DEXCLUDE_MODULES="mod1;mod2"...)
@@ -528,6 +525,8 @@ else()
   foreach(TEST_LIB ${ALILIBSTESTED})
     add_test(load_library_${TEST_LIB}
       env
+      PATH=$ENV{PATH}
+      ROOTSYS=$ENV{ROOTSYS}
       LD_LIBRARY_PATH=${CMAKE_INSTALL_PREFIX}/lib:$ENV{LD_LIBRARY_PATH}
       DYLD_LIBRARY_PATH=${CMAKE_INSTALL_PREFIX}/lib:$ENV{DYLD_LIBRARY_PATH}
       ROOT_HIST=0

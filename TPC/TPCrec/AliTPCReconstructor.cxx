@@ -64,6 +64,7 @@ ClassImp(AliTPCReconstructor)
 Int_t    AliTPCReconstructor::fgStreamLevel     = 0;             // stream (debug) level
 AliTPCAltroEmulator *  AliTPCReconstructor::fAltroEmulator=0;    // ALTRO emulator
 TTreeSRedirector    *  AliTPCReconstructor::fgDebugStreamer=0;                          // NOTE -  AliTPCReconstructor is not an owner of the streamer
+Float_t                AliTPCReconstructor::fgStreamDownsample=0.03;  //Downsampling fraction
 TString                AliTPCReconstructor::fgPIDRespnonsePath="$ALICE_PHYSICS/OADB/COMMON/PID/data/TPCPIDResponse.root";
  
 TVectorD *  AliTPCReconstructor::fSystematicErrors=0;
@@ -74,6 +75,7 @@ Double_t    AliTPCReconstructor::fgPrimaryZ2XCut = 0;
 Double_t    AliTPCReconstructor::fgZOutSectorCut = 0;
 Bool_t      AliTPCReconstructor::fgCompactClusters = kFALSE;
 Bool_t      AliTPCReconstructor::fgCountMCTrackClusters = kFALSE;
+Int_t       AliTPCReconstructor::fgUseHLTTracks = 0;
 
 AliTPCReconstructor::AliTPCReconstructor():
 AliReconstructor(),

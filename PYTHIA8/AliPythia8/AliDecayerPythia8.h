@@ -10,7 +10,10 @@
 
 #include <ParticleData.h>
 #include <TVirtualMCDecayer.h>
-#include "AliDecayer.h"
+#include <AliDecayer.h>
+
+class AliDecayerPythia8;
+
 
 class AliDecayerPythia8 : public TVirtualMCDecayer {
  public:
@@ -36,8 +39,8 @@ class AliDecayerPythia8 : public TVirtualMCDecayer {
   AliDecayerPythia8(const AliDecayerPythia8&);
   AliDecayerPythia8 operator=(const AliDecayerPythia8&);
   void     SwitchOffHeavyFlavour();
-  void     ForceHadronicD(Int_t optUser4Bodies = 1,Int_t optUseDtoV0 =1, Int_t optForceLcChannel = 0);
-
+  void     ForceHadronicD(Int_t optUser4Bodies = 1,Int_t optUseDtoV0 =1, Int_t optForceLcChannel = 0, Int_t optForceXicChannel = 0, Int_t optForceDsChannel = 0);
+  void  ForceBeautyUpgrade();
   AliTPythia8*  fPythia8;          // Pointer to pythia8
   Int_t         fDebug;            // Debug level
  

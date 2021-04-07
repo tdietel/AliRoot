@@ -14,12 +14,10 @@
  **************************************************************************/
 #include "AliVCaloTrigger.h"
 
-/// \cond CLASSIMP
 ClassImp(AliVCaloTrigger)
-/// \endcond
   
-  AliVCaloTrigger::AliVCaloTrigger(const AliVCaloTrigger& vtrg) :
-    TNamed(vtrg) { ; }
+AliVCaloTrigger::AliVCaloTrigger(const AliVCaloTrigger& vtrg) :
+  TNamed(vtrg) { ; }
 
 AliVCaloTrigger& AliVCaloTrigger::operator=(const AliVCaloTrigger& vtrg)
 { 

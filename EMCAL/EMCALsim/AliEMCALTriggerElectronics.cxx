@@ -13,12 +13,14 @@
  * provided "as is" without express or implied warranty.                  *
  **************************************************************************/
 
+#include <vector>
 #include "AliEMCALTriggerElectronics.h"
 #include "AliEMCALTriggerTRU.h"
 #include "AliEMCALTriggerSTU.h"
 #include "AliEMCALGeometry.h"
 #include "AliRunLoader.h"
 #include "AliCDBManager.h"
+#include "AliCDBEntry.h"
 #include "AliEMCAL.h" 
 #include "AliRun.h" 
 #include "AliEMCALTriggerDCSConfig.h"
@@ -31,7 +33,10 @@
 #include "AliEMCALTriggerPatch.h"
 #include "AliEMCALTriggerTRUDCSConfig.h"
 #include "AliEMCALTriggerSTUDCSConfig.h"
+#include "AliEMCALTriggerConstants.h"
+#include "AliEMCALSimParam.h"
 
+#include <TRandom.h>
 #include <TVector2.h>
 
 /// \cond CLASSIMP
@@ -42,6 +47,8 @@ ClassImp(AliEMCALTriggerElectronics) ;
 /// Constructor
 //__________________
 AliEMCALTriggerElectronics::AliEMCALTriggerElectronics(const AliEMCALTriggerDCSConfig *dcsConf) : TObject(),
+fADCscaleMC(1.239958),
+fL1ADCNoise(0),
 fTRU(new TClonesArray("AliEMCALTriggerTRU",52)),
 fSTU(0x0),
 fGeometry(0)
@@ -49,6 +56,25 @@ fGeometry(0)
   TVector2 rSize;
 	
   rSize.Set(4.,24.);	
+
+  AliEMCALSimParam * fSimParam = 0;
+  if (AliCDBManager::Instance()->IsDefaultStorageSet()) {
+    AliCDBEntry *entry = (AliCDBEntry*) AliCDBManager::Instance()->Get("EMCAL/Calib/SimParam");
+    if (entry) fSimParam = (AliEMCALSimParam *) entry->GetObject();
+  }
+
+  if (fSimParam==0) {
+    AliWarning("Could not get the EMCALSimParam instance from OCDB. Using Default");
+    fSimParam = AliEMCALSimParam::GetInstance();
+  }
+
+  if (fSimParam==0) {
+    AliWarning("Could not get the EMCALSimParam instance");
+  }
+  else {
+    fL1ADCNoise = fSimParam->GetL1ADCNoise();
+    if (AliDebugLevel()) fSimParam->Print("");
+  }
 
   AliRunLoader *rl = AliRunLoader::Instance();
   if (rl->GetAliRun() && rl->GetAliRun()->GetDetector("EMCAL")) {
@@ -89,6 +115,15 @@ fGeometry(0)
   // Checking Firmware from DCS config to choose algorithm
   fMedianMode = stuConf->GetMedianMode();
   AliEMCALTriggerSTUDCSConfig* stuConfDCal = 0;
+
+  if (iTriggerMapping == 1) {
+    // In Run 1, the patch size was stored in the FW version number, not OCDB
+    Int_t fFW = stuConf->GetFw();
+    if ((fFW >> 16) == 2) {
+      stuConf->SetPatchSize(2);
+      AliDebug(999,TString::Format("Patch size has been set to 16x16 (value 2) based on the EMCALSTU firmware version. This should only occur for Run 1"));
+    }
+  }
 
   if (iTriggerMapping >= 2) {
     rSize.Set( 40., 48. );  // This should be accurate
@@ -154,10 +189,10 @@ fGeometry(0)
   TString str = "map";
 
   // 32 TRUs
-  Int_t iTRU = 0;
-  for (Int_t i = 0; i < fNTRU; i++) {
+  Int_t iTRU = 0; // iTRU is an index skipping fake TRUs
+  for (Int_t i = 0; i < fNTRU; i++) { // 'i' is the geometric index (0-51)
 
-    // Skip virtual TRUs
+    // Skip virtual TRUs in PHOS hole
     if (i == 34 || i == 35 ||
         i == 40 || i == 41 ||
         i == 46 || i == 47) {
@@ -201,16 +236,32 @@ fGeometry(0)
         default:
           AliError("TRU Initialization for this Trigger Mapping is not implemented!");
       }
-      AliEMCALTriggerTRU *mytru = new ((*fTRU)[i]) AliEMCALTriggerTRU(truConf, rSize, iTRU % 2);
+      // AliEMCALTriggerTRU initialization needs Map Type 0 for ASide and 1 for CSide ADC mappings
+      Int_t iMapType = 0;
 
-      AliDebug(999,Form("Building TRU %d with dimensions %d x %d\n",iTRU,int(rSize.X()),int(rSize.Y())));
-      if (truConf->GetGTHRL0() <= 1) { // Checking for the null L0 threshold
-        if(dcsConf->IsTRUEnabled(iTRU)){
-          AliError(Form("Active TRU %d DCS config is missing L0 threshold.  L0 Trigger will not be properly simulated for this TRU.",iTRU));
-        } else {
-          AliWarning(Form("Inactive TRU %d - L0 trigger will not be simulated for this TRU", iTRU));
+      if (iTriggerMapping == 1) iMapType = iTRU % 2; // Run 1 Geometry (TRUs alternate sides)
+      else if (iTriggerMapping == 2) {
+        iMapType = iTRU % 2;
+        if (i < 30) iMapType = (i % 6) / 3;
+        else if (i < 32) iMapType = i % 2;
+        else if (i < 50) iMapType = ((i - 2) % 6) / 3;
+        else if (i < 52) iMapType = i % 2;
+      } else {
+        AliFatal("Unknown Trigger Mapping requested. May need implementation.");
+      }
+
+      AliEMCALTriggerTRU *mytru = new ((*fTRU)[i]) AliEMCALTriggerTRU(truConf, rSize, iMapType);
+      //AliEMCALTriggerTRU *mytru = new ((*fTRU)[i]) AliEMCALTriggerTRU(truConf, rSize, iTRU % 2); // Run 1
+
+      AliDebug(999,Form("Building TRU %d with dimensions %d x %d and MapType %d\n",iTRU,int(rSize.X()),int(rSize.Y()),iMapType));
+      if(dcsConf->IsTRUEnabled(fGeometry->GetOnlineIndexFromTRUIndex(iTRU))) {
+        if (truConf->GetGTHRL0() <= 1) { // Checking for the null L0 threshold
+          AliError(Form("Active TRU %d DCS config is missing L0 threshold.  L0 Trigger will not be simulated for this TRU.",iTRU));
           mytru->SetActive(false);
-        }
+        } 
+      } else {
+        AliDebug(999,Form("Inactive TRU %d - L0 trigger will not be simulated for this TRU", iTRU));
+        mytru->SetActive(false);
       }
 
       AliEMCALTriggerTRU *oTRU = static_cast<AliEMCALTriggerTRU*>(fTRU->At(i));
@@ -254,7 +305,7 @@ void AliEMCALTriggerElectronics::Digits2Trigger(TClonesArray* digits, const Int_
   // Digits to trigger
   Int_t pos, px, py, id; 
 
-  Int_t region[104][48], posMap[104][48];
+  Int_t region[104][48], posMap[104][48]; // [phi] [eta]
 
   for (Int_t i = 0; i < 104; i++) for (Int_t j = 0; j < 48; j++) 
   {
@@ -288,7 +339,7 @@ void AliEMCALTriggerElectronics::Digits2Trigger(TClonesArray* digits, const Int_
           if (data->GetMode())
             etr->SetADC(iADC, time, 4 * amp);
           else
-            etr->SetADC(iADC, time,     amp);
+            etr->SetADC(iADC, time, (Int_t) (fADCscaleMC * amp));
         }
       }
     }
@@ -299,31 +350,30 @@ void AliEMCALTriggerElectronics::Digits2Trigger(TClonesArray* digits, const Int_
 
   Int_t iL0 = 0;
 
-  Int_t * timeL0 = (Int_t *) calloc(fNTRU,sizeof(Int_t));
-  if (!timeL0) AliFatal("Failed to allocate memory for timeL0 array.");
+  std::vector<int> timeL0(fNTRU);
   Int_t  timeL0min = 999;
   
-  for (Int_t i = 0; i < fNTRU; i++) 
+  for (Int_t truid = 0; truid < fNTRU; truid++) 
   {
-    AliEMCALTriggerTRU *iTRU = static_cast<AliEMCALTriggerTRU*>(fTRU->At(i));
-    if (!iTRU) continue;
+    AliEMCALTriggerTRU *currenttru = static_cast<AliEMCALTriggerTRU*>(fTRU->At(truid));
+    if (!currenttru) continue;
     
-    AliDebug(999, Form("===========< TRU %2d >============", i));
+    AliDebug(999, Form("===========< TRU %2d >============", truid));
     
-  if (iTRU->L0()) // L0 recomputation: *ALWAYS* done from FALTRO
+    if (currenttru->L0()) // L0 recomputation: *ALWAYS* done from FALTRO
     {
-      iL0++;
+        iL0++;
       
-      timeL0[i] = iTRU->GetL0Time();
+        timeL0[truid] = currenttru->GetL0Time();
       
-      if (!timeL0[i]) AliWarning(Form("TRU# %d has 0 trigger time",i));
+        if (!timeL0[truid]) AliWarning(Form("TRU# %d has 0 trigger time",truid));
       
-      if (timeL0[i] < timeL0min) timeL0min = timeL0[i];
+        if (timeL0[truid] < timeL0min) timeL0min = timeL0[truid];
       
-      data->SetL0Trigger(0, i, 1); // TRU# i has issued a L0
+        data->SetL0Trigger(AliEMCALTriggerData::L0DecisionOrigin_t::kOriginRecalc, truid, AliEMCALTriggerData::L0TriggerStatus_t::kFired); // TRU# i has issued a L0
     }
     else
-      data->SetL0Trigger(0, i, 0);
+      data->SetL0Trigger(AliEMCALTriggerData::L0DecisionOrigin_t::kOriginRecalc, truid, AliEMCALTriggerData::L0TriggerStatus_t::kNotFired);
   }
 
 
@@ -331,7 +381,7 @@ void AliEMCALTriggerElectronics::Digits2Trigger(TClonesArray* digits, const Int_
   AliEMCALTriggerRawDigit* dig = 0x0;
   
 
-  if (iL0 && (!data->GetMode() || !fSTU->GetDCSConfig()->GetRawData())) 
+  if (iL0 && (data->IsSimulationMode() || !fSTU->GetDCSConfig()->GetRawData())) 
   {
     // Update digits after L0 calculation
     for (Int_t i = 0; i < fNTRU; i++)
@@ -359,48 +409,62 @@ void AliEMCALTriggerElectronics::Digits2Trigger(TClonesArray* digits, const Int_
       for (int j = 0; j < nPhi; j++) for (int k = 0; k < nEta; k++) reg[j][k] = 0;
 //			for (int j = 0; j < nEta; j++) for (int k = 0; k < nPhi; k++) reg[j][k] = 0;
           
+      // Loading information from TRU into matrix reg
       iTRU->GetL0Region(timeL0min, reg);
 
       for (int j = 0; j < iTRU->RegionSize()->X(); j++) // phi
       {  
         for (int k = 0; k < iTRU->RegionSize()->Y(); k++) // eta
         {
-          if (reg[j][k]
-//					if (true 
-            && 
-            fGeometry->GetAbsFastORIndexFromPositionInTRU(i, k, j, id)
-//						fGeometry->GetAbsFastORIndexFromPositionInTRU(i, j, k, id)
-            &&
-            fGeometry->GetPositionInEMCALFromAbsFastORIndex(id, py, px))
-  //					fGeometry->GetPositionInEMCALFromAbsFastORIndex(id, px, py))
+
+          if (!fGeometry->GetAbsFastORIndexFromPositionInTRU(i, k, j, id)) continue;  // (iTRU, Eta, Phi, FastOR)
+          if (!fGeometry->GetPositionInEMCALFromAbsFastORIndex(id, py, px)) continue; // (FastOR, Eta, Phi)
+          int L1Timesum = 0;
+
+          if (reg[j][k])  // (phi,eta)
           {
+            // 14b to 12b STU time sums
+            reg[j][k] >>= 2;
+            L1Timesum = reg[j][k];
+            //dig->SetL1TimeSum(reg[j][k]);
+          }
+
+          // Adding noise here
+          // L1Timesum += noise
+
+          // sigma = noise (GeV) / 0.07874 (GeV/ADC); // sigma in L1 ADC
+          double sigma = fL1ADCNoise / EMCALTrigger::kEMCL1ADCtoGeV ; // sigma in L1 ADC
+          if (sigma > 0) { // disable noise if sigma <= 0
+            double noise = gRandom->Gaus(0,sigma);
+            int noiseInt = 0;
+            if (noise >= 1) noiseInt = (int) floor(noise);
+            L1Timesum += noiseInt;
+          }
+
+          if (L1Timesum > 0) {
+
             pos = posMap[px][py];
-                  
+
             if (pos == -1)
             {
               // Add a new digit
               posMap[px][py] = digits->GetEntriesFast();
-
               new((*digits)[digits->GetEntriesFast()]) AliEMCALTriggerRawDigit(id, 0x0, 0);
-                    
-              dig = (AliEMCALTriggerRawDigit*)digits->At(digits->GetEntriesFast() - 1);							
+              dig = (AliEMCALTriggerRawDigit*)digits->At(digits->GetEntriesFast() - 1);
             }
             else
             {
               dig = (AliEMCALTriggerRawDigit*)digits->At(pos);
             }
-            
-            // 14b to 12b STU time sums
-            reg[j][k] >>= 2; 
-            
-            dig->SetL1TimeSum(reg[j][k]);
+            dig->SetL1TimeSum(L1Timesum);
+
           }
         }
       }
     }
   }
 
-  if (iL0 && !data->GetMode()) //Simulation
+  if (iL0 && data->IsSimulationMode()) //Simulation
   {
     for (Int_t i = 0; i < fNTRU; i++)
     {
@@ -451,7 +515,13 @@ void AliEMCALTriggerElectronics::Digits2Trigger(TClonesArray* digits, const Int_
 //              posMap[px + j % sizeX][py + j / sizeX] = digits->GetEntriesFast();
               posMap[px + j / sizeX][py + j % sizeX] = digits->GetEntriesFast();
 
-              new((*digits)[digits->GetEntriesFast()]) AliEMCALTriggerRawDigit(id, 0x0, 0);
+              // Previously this created digits only with the upper left fastOR id
+              //new((*digits)[digits->GetEntriesFast()]) AliEMCALTriggerRawDigit(id, 0x0, 0);
+              // Now use the proper FastOR ID
+              Int_t newID = -1;
+              fGeometry->GetAbsFastORIndexFromPositionInEMCAL(py + j % sizeX,px + j / sizeX, newID);
+              new((*digits)[digits->GetEntriesFast()]) AliEMCALTriggerRawDigit(newID, 0x0, 0);
+
                 
               dig = (AliEMCALTriggerRawDigit*)digits->At(digits->GetEntriesFast() - 1);							
             } else {
@@ -514,7 +584,7 @@ void AliEMCALTriggerElectronics::Digits2Trigger(TClonesArray* digits, const Int_
 	if (fSTUDCAL) fSTUDCAL->SetRegion(&region[64]); //DCAL's region is subset of region
 //	if (fSTUDCAL) fSTUDCAL->SetRegion(region); 
   
-  if (data->GetMode()) // Reconstruction
+  if (data->IsRawDataMode()) // Reconstruction
   {
     for (int ithr = 0; ithr < 2; ithr++) {
       AliDebug(999, Form(" THR %d / EGA %d / EJE %d", ithr, data->GetL1GammaThreshold(ithr), data->GetL1JetThreshold(ithr)));

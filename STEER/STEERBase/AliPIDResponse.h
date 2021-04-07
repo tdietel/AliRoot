@@ -112,6 +112,10 @@ public:
   EDetPidStatus GetSignalDelta(EDetector detCode, const AliVParticle *track, AliPID::EParticleType type, Double_t &val, Bool_t ratio=kFALSE) const;
   Double_t GetSignalDelta(EDetector detCode, const AliVParticle *track, AliPID::EParticleType type, Bool_t ratio=kFALSE) const;
 
+  // expected signal and sigma
+  Float_t GetExpectedSignal(EDetector detCode, const AliVParticle *track, AliPID::EParticleType type) const;
+  Float_t GetExpectedSigma(EDetector detCode, const AliVParticle *track, AliPID::EParticleType type) const;
+
   // Probabilities
   EDetPidStatus ComputePIDProbability  (EDetCode  detCode, const AliVTrack *track, Int_t nSpecies, Double_t p[]) const;
   EDetPidStatus ComputePIDProbability  (EDetector detCode, const AliVTrack *track, Int_t nSpecies, Double_t p[]) const;
@@ -177,6 +181,11 @@ public:
   void SetUseTPCMultiplicityCorrection(Bool_t useMultiplicityCorrection = kTRUE) { fUseTPCMultiplicityCorrection = useMultiplicityCorrection; };
   Bool_t UseTPCMultiplicityCorrection() const { return fUseTPCMultiplicityCorrection; };
 
+  void SetUseTPCPileupCorrection(Bool_t usePileupCorrection = kTRUE) { fUseTPCPileupCorrection = usePileupCorrection; fTPCResponse.SetPileupCorrectionStrategy(AliTPCPIDResponse::kPileupCorrectionInExpectedSignal); if (!usePileupCorrection) fTPCResponse.SetPileupCorrectionStrategy(AliTPCPIDResponse::kNoPileupCorrection);};
+  Bool_t UseTPCPileupCorrection() const { return fUseTPCPileupCorrection; };
+
+  virtual void SetEventPileupProperties(const AliVEvent* event);
+
   // TRD setting
   void SetUseTRDEtaCorrection(Bool_t useTRDEtaCorrection = kTRUE) { fUseTRDEtaCorrection = useTRDEtaCorrection; };
   Bool_t UseTRDEtaCorrection() const { return fUseTRDEtaCorrection; };
@@ -190,6 +199,7 @@ public:
   // TOF setting
   void SetTOFtail(Float_t tail=0.9){if(tail > 0) fTOFtail=tail; else printf("TOF tail should be greater than 0 (nothing done)\n");};
   void SetTOFResponse(AliVEvent *vevent,EStartTimeType_t option);
+  void ResetTuneOnDataTOF(Bool_t flag=kTRUE) {fResetTuneOnDataTOF = flag;}
 
   // TunedOnData functionality
   virtual Float_t GetITSsignalTunedOnData(const AliVTrack *t) const;
@@ -212,7 +222,7 @@ public:
 
   void    SetProbabilityRangeNsigma(Float_t range) { fRange = range; }
   Float_t GetProbabilityRangeNsigma() const        { return fRange;  }
-
+  static Float_t interpolateP(Float_t p0, Float_t p1, Float_t mass, Float_t X, Float_t z=1);
 protected:
   AliITSPIDResponse   fITSResponse;    //PID response function of the ITS
   AliTPCPIDResponse   fTPCResponse;    //PID response function of the TPC
@@ -227,6 +237,8 @@ protected:
   //unbuffered PID calculation
   virtual Float_t GetNumberOfSigmasTOFold  (const AliVParticle */*track*/, AliPID::EParticleType /*type*/) const {return 0;}
   virtual Float_t GetSignalDeltaTOFold(const AliVParticle */*track*/, AliPID::EParticleType /*type*/, Bool_t /*ratio*/=kFALSE) const {return -9999.;}
+  virtual Float_t GetExpectedSignalTOFold(const AliVParticle */*vtrack*/, AliPID::EParticleType /*type*/) const {return -999.;}
+  virtual Float_t GetExpectedSigmaTOFold(const AliVParticle */*vtrack*/, AliPID::EParticleType /*type*/) const {return -999.;}
 
   Int_t CalculateTRDResponse(const AliVTrack *track, Double_t p[],AliTRDPIDResponse::ETRDPIDMethod PIDmethod) const;
   EDetPidStatus GetComputeTRDProbability  (const AliVTrack *track, Int_t nSpecies, Double_t p[],AliTRDPIDResponse::ETRDPIDMethod PIDmethod=AliTRDPIDResponse::kLQ1D) const;
@@ -269,6 +281,7 @@ private:
   AliOADBContainer* fOADBvoltageMaps;   //! container with the voltage maps
   Bool_t fUseTPCEtaCorrection;          // Use TPC eta correction
   Bool_t fUseTPCMultiplicityCorrection; // Use TPC multiplicity correction
+  Bool_t fUseTPCPileupCorrection;       // Use TPC pileup correction
   Bool_t fUseTPCNewResponse;            // Use new method for TPC PID response
 
   AliTRDPIDResponseObject *fTRDPIDResponseObject; //! TRD PID Response Object
@@ -279,6 +292,7 @@ private:
 
   Float_t fTOFtail;                    //! TOF tail effect used in TOF probability
   AliTOFPIDParams *fTOFPIDParams;      //! TOF PID Params - period depending (OADB loaded)
+  Bool_t fResetTuneOnDataTOF;          /// flag to reset TOF tune-on-data in event initialisation
 
   AliHMPIDPIDParams *fHMPIDPIDParams;  //! HMPID PID Params (OADB loaded)
 
@@ -316,6 +330,7 @@ private:
 
   //TRD
   void SetTRDPidResponseMaster();
+  void CheckTRDLikelihoodParameter();
   void InitializeTRDResponse();
   void SetTRDSlices(UInt_t TRDslicesForPID[2],AliTRDPIDResponse::ETRDPIDMethod method) const;
   void SetTRDdEdxParams();
@@ -361,6 +376,20 @@ private:
   EDetPidStatus GetSignalDeltaTOF(const AliVParticle *track, AliPID::EParticleType type, Double_t &val, Bool_t ratio=kFALSE) const;
   EDetPidStatus GetSignalDeltaHMPID(const AliVParticle *vtrack, AliPID::EParticleType type, Double_t &val, Bool_t ratio=kFALSE) const;
 
+  // Expected signal
+  Float_t GetExpectedSignalITS  (const AliVParticle *track, AliPID::EParticleType type) const;
+  Float_t GetExpectedSignalTPC  (const AliVParticle *track, AliPID::EParticleType type) const;
+  Float_t GetExpectedSignalTRD  (const AliVParticle *track, AliPID::EParticleType type) const;
+  Float_t GetExpectedSignalTOF  (const AliVParticle *track, AliPID::EParticleType type) const;
+  Float_t GetExpectedSignalHMPID(const AliVParticle *track, AliPID::EParticleType type) const;
+
+  // Expected sigma
+  Float_t GetExpectedSigmaITS  (const AliVParticle *track, AliPID::EParticleType type) const;
+  Float_t GetExpectedSigmaTPC  (const AliVParticle *track, AliPID::EParticleType type) const;
+  Float_t GetExpectedSigmaTRD  (const AliVParticle *track, AliPID::EParticleType type) const;
+  Float_t GetExpectedSigmaTOF  (const AliVParticle *track, AliPID::EParticleType type) const;
+  Float_t GetExpectedSigmaHMPID(const AliVParticle *track, AliPID::EParticleType type) const;
+
   // Probabilities
   EDetPidStatus GetComputePIDProbability  (EDetector detCode,  const AliVTrack *track, Int_t nSpecies, Double_t p[]) const;
   EDetPidStatus GetComputeITSProbability  (const AliVTrack *track, Int_t nSpecies, Double_t p[]) const;
@@ -379,7 +408,7 @@ private:
   EDetPidStatus GetPHOSPIDStatus(const AliVTrack *track) const;
   EDetPidStatus GetEMCALPIDStatus(const AliVTrack *track) const;
 
-  ClassDef(AliPIDResponse, 19);  //PID response handling
+  ClassDef(AliPIDResponse, 21);  //PID response handling
 };
 
 #endif

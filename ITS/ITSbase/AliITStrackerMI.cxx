@@ -727,7 +727,7 @@ Int_t AliITStrackerMI::PropagateBack(AliESDEvent *event) {
   Int_t nentr=event->GetNumberOfTracks();
   //  Info("PropagateBack", "Number of ESD tracks: %d\n", nentr);
   double bz0 = GetBz();
-  const double kWatchStep=10.; // for larger steps watch arc vs segment difference
+  const double kWatchStep = 1.e-4; // for larger deltaXY/2R steps watch arc vs segment difference
   //
   Bool_t checkInv = AliITSReconstructor::GetCheckInvariant(); // off in the special reco mode w/o invariant check
   Int_t ntrk=0;
@@ -745,15 +745,14 @@ Int_t AliITStrackerMI::PropagateBack(AliESDEvent *event) {
        double dxs = xyzTrk[0] - xyzVtx[0];
        double dys = xyzTrk[1] - xyzVtx[1];
        double dzs = xyzTrk[2] - xyzVtx[2];
-       // RS: for large segment steps d use approximation of cicrular arc s by
-       // s = 2R*asin(d/2R) = d/p asin(p) \approx d/p (p + 1/6 p^3) = d (1+1/6 p^2)
-       // where R is the track radius, p = d/2R = 2C*d (C is the abs curvature)
-       // Hence s^2/d^2 = (1+1/6 p^2)^2
+       // RS: for large segment steps dxy use exact cicrular arc
+       // s = 2R*asin(dxy/2R) = dxy/p asin(p), where R is the track radius = |1./C|, p = dxy/2R = C*dxy/2 (C is the abs curvature)
+       double crvh = 0.5*TMath::Abs(esd->GetC(bz0));
        dst2 = dxs*dxs + dys*dys;
-       if (dst2 > kWatchStep*kWatchStep) { // correct circular part for arc/segment factor
-	 double crv = TMath::Abs(esd->GetC(bz0));
-	 double fcarc = 1.+crv*crv*dst2/6.;
-	 dst2 *= fcarc*fcarc;
+       double dxy = TMath::Sqrt(dst2), arg = crvh*dxy;
+       if (arg > kWatchStep) { // correct circular part for arc/segment factor
+	 double dst = 1./crvh*TMath::ASin(arg);
+	 dst2 *= dst*dst;
        }
        dst2 += dzs*dzs;
      }
@@ -2708,7 +2707,8 @@ Bool_t AliITStrackerMI::RefitAt(Double_t xx,AliITStrackMI *track,
        }
        if (cci>=0) {
 	 track->SetExtraCluster(ilayer,(ilayer<<28)+cci);
-	 track->SetExtraModule(ilayer,idetExtra);
+	 //track->SetExtraModule(ilayer,idetExtra);
+	 track->SetModuleIndexInfo(ilayer+AliITSgeomTGeo::kNLayers, idetExtra);
        }
      } // end search for extra clusters in overlapped modules
      

@@ -58,7 +58,11 @@ AliHLTVZEROOnlineCalibComponent::AliHLTVZEROOnlineCalibComponent() :
 
 AliHLTProcessor(),
 fRunInfo(NULL),
-fVZERORecoParam(NULL)
+fVZERORecoParam(NULL),
+fRefTrigger("CINT7-B"),
+fTrigger1("CV0H7-B"),
+fTrigger2("CMID7-B"),
+fTrigger3("CINT7ZAC-B")
 {
     // a component meant to extract simple V0 amplitudes for an
     // online monitoring of V0 conditions. The vast majority of
@@ -73,13 +77,16 @@ fVZERORecoParam(NULL)
     //Initialize
     TString lDetTypes[3] = {"V0M", "V0A", "V0C"};
     TString lReadoutTypes[2] = {"", "Online"};
-    TString lTrigTypes[4] = {"", "_Central", "_SemiCentral", "_C0V0H"};
+    TString lTrigTypes[4] = {"", "_Central", "_SemiCentral", "_Extra"};
     TString lTitles[2] = {"amplitude", "trigger charge"};
     
     for(Int_t i=0; i<24; i++){
         TString lName = Form("fHistMult%s%s%s", lDetTypes[i%3].Data(), lReadoutTypes[(i/3)%2].Data(), lTrigTypes[i/6].Data());
         TString lTitle = Form("%s %s", lDetTypes[i%3].Data(), lTitles[(i/3)%2].Data());
-        
+        if(i/6==0) lTitle.Append(Form(" ref: %s", fRefTrigger.Data()));
+        if(i/6==1) lTitle.Append(Form(" trig: %s", fTrigger1.Data()));
+        if(i/6==2) lTitle.Append(Form(" trig: %s", fTrigger2.Data()));
+        if(i/6==3) lTitle.Append(Form(" trig: %s", fTrigger3.Data()));
         fHistMult[i].SetName(lName.Data());
         fHistMult[i].SetTitle(lTitle.Data());
         fHistMult[i].SetYTitle("Event Count");
@@ -173,14 +180,26 @@ Int_t AliHLTVZEROOnlineCalibComponent::DoInit( Int_t argc, const Char_t** argv )
     
     Int_t iResult=0;
     
+    //process arguments
+    if (ProcessOptionString(GetComponentArgs())<0)
+    {
+        HLTFatal("wrong config string! %s", GetComponentArgs().c_str());
+        return -1;
+    }
+    
+    //change histo titles to match reference trigger
+    TString lDetTypes[3] = {"V0M", "V0A", "V0C"};
+    TString lTitles[2] = {"amplitude", "trigger charge"};
+    
+    for(Int_t i=0; i<6; i++){
+        TString lTitle = Form("%s %s", lDetTypes[i%3].Data(), lTitles[(i/3)%2].Data());
+        lTitle.Append(Form(" ref: %s", fRefTrigger.Data()));
+        fHistMult[i].SetTitle(lTitle.Data());
+    }
+    
     // -- Load GeomManager
     if(AliGeomManager::GetGeometry()==NULL){
         AliGeomManager::LoadGeometry();
-    }
-    
-    // -- Read the component arguments
-    if (iResult>=0) {
-        iResult=ConfigureFromArgumentString(argc, argv);
     }
     
     // -- Get AliRunInfo variables
@@ -302,24 +321,24 @@ Int_t AliHLTVZEROOnlineCalibComponent::DoEvent(const AliHLTComponentEventData& /
     //Get vertex for quick check
     const AliESDVertex* itsSpdVertex = dynamic_cast<const AliESDVertex*>(GetFirstInputObject(kAliHLTDataTypeESDVertex|kAliHLTDataOriginITSSPD, "AliESDVertex"));
     
-    bool lIsSemiCentral = true, lIsCentral = true, lIsMinBias = true, lIsC0V0H = true, lIsV0DecisionOK = true, lIsVertexPositionGood = true;
+    bool lIsSemiCentral = false, lIsCentral = false, lIsMinBias = false, lIsC0V0H = false, lIsV0DecisionOK = true, lIsVertexPositionGood = true;
     const AliHLTCTPData* ctp = CTPData();
     if (ctp)
     {
-        lIsMinBias=ctp->MatchTriggerRE("C0TVX");
-        lIsCentral=ctp->MatchTriggerRE("C0V0M");
-        lIsSemiCentral=ctp->MatchTriggerRE("C0VSC");
-        lIsC0V0H=ctp->MatchTriggerRE("C0V0H");
+        lIsMinBias=ctp->MatchTriggerRE(fRefTrigger.Data());
+        lIsCentral=ctp->MatchTriggerRE(fTrigger1.Data());
+        lIsSemiCentral=ctp->MatchTriggerRE(fTrigger2.Data());
+        lIsC0V0H=ctp->MatchTriggerRE(fTrigger3.Data());
     }
     if (esdVZERO && itsSpdVertex)
     {
-        printf("Vertex position: %f %f %f\n", itsSpdVertex->GetX(), itsSpdVertex->GetY(), itsSpdVertex->GetZ());
+        //printf("Vertex position: %f %f %f\n", itsSpdVertex->GetX(), itsSpdVertex->GetY(), itsSpdVertex->GetZ());
         //Rough V0 decision check (equiv to phys. sel.)
         if (esdVZERO->GetV0ADecision()!=AliVVZERO::kV0BB) lIsV0DecisionOK = false;
         if (esdVZERO->GetV0CDecision()!=AliVVZERO::kV0BB) lIsV0DecisionOK = false;
         if ( TMath::Abs(itsSpdVertex->GetZ())>10.0 ) lIsVertexPositionGood = false;
         if ( itsSpdVertex->GetNContributors() < 1 ) lIsVertexPositionGood = false; //not okay, no contributor
-        printf("Decisions: v0 decision is %d , vertex decision is %d\n", lIsV0DecisionOK, lIsVertexPositionGood);
+        //printf("Decisions: v0 decision is %d , vertex decision is %d\n", lIsV0DecisionOK, lIsVertexPositionGood);
         
         Double_t lQuantities[6] = {
             static_cast<Double_t>(esdVZERO->GetMTotV0A()+esdVZERO->GetMTotV0C()),
@@ -344,7 +363,7 @@ Int_t AliHLTVZEROOnlineCalibComponent::DoEvent(const AliHLTComponentEventData& /
     //The ZMQ merging component that sits at the end of the chain will receive all histograms from all concurrent VZEROOnlineCalib components, and merge them to the final histogram.
     
     for(Int_t i=0; i<24; i++){
-        if ( fHistMult[i].GetEntries() && PushBack(&fHistMult[i], kAliHLTDataTypeHistogram|kAliHLTDataOriginHLT) > 0) fHistMult[i].Reset();
+        if ( PushBack(&fHistMult[i], kAliHLTDataTypeHistogram|kAliHLTDataOriginHLT) > 0) fHistMult[i].Reset();
     }
     
     return iResult;
@@ -358,3 +377,32 @@ Int_t AliHLTVZEROOnlineCalibComponent::Reconfigure(const Char_t* cdbEntry, const
     return iResult;
 }
 
+// #################################################################################
+int AliHLTVZEROOnlineCalibComponent::ProcessOption(TString option, TString value)
+{
+    //process option
+    //to be implemented by the user
+    
+    if (option.EqualTo("trigger"))
+    {
+        //Simple setter
+        fRefTrigger = value.Data();
+    }
+    else if (option.EqualTo("trigger1") ){
+        fTrigger1 = value.Data();
+    }
+    else if (option.EqualTo("trigger2") ){
+        fTrigger2 = value.Data();
+    }
+    else if (option.EqualTo("trigger3") ){
+        fTrigger3 = value.Data();
+    }
+    else if (option.EqualTo("pushback-period")) {} //Let -pushback-period optionm pass
+    else
+    {
+        HLTError("unrecognized option %s", option.Data());
+        return -1;
+    }
+    
+    return 1;
+}

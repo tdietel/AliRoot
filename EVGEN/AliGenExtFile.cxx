@@ -54,7 +54,15 @@ AliGenExtFile::AliGenExtFile()
     :AliGenMC(),
      fFileName(0),
      fReader(0),
-     fStartEvent(0)
+     fStartEvent(0),
+     ///
+     fLimitDiscardedEvents(999999),
+     fSetMultTrig(0),
+     fMultCut(0),
+     fSetPtTrig(0),
+     fPtCut(0),
+     fSetUserTrig(0)
+     ///
 {
 //  Constructor
 //
@@ -66,7 +74,15 @@ AliGenExtFile::AliGenExtFile(Int_t npart)
     :AliGenMC(npart),
      fFileName(0),
      fReader(0),
-     fStartEvent(0)
+     fStartEvent(0),
+     ///
+     fLimitDiscardedEvents(999999),
+     fSetMultTrig(0),
+     fMultCut(0),
+     fSetPtTrig(0),
+     fPtCut(0),
+     fSetUserTrig(0)
+     ///
 {
 //  Constructor
     fName   = "ExtFile";
@@ -103,7 +119,7 @@ void AliGenExtFile::Generate()
   //
   // Fast forward up to start Event
   for (Int_t ie=0; ie<fStartEvent; ++ie ) {
-    Int_t nTracks = fReader->NextEvent(); 	
+    Int_t nTracks = fReader->NextEvent();
     if (nTracks == 0) {
       // printf("\n No more events !!! !\n");
       Warning("AliGenExtFile::Generate","\nNo more events in external file!!!\nLast event may be empty or incomplete.\n");
@@ -114,12 +130,16 @@ void AliGenExtFile::Generate()
 	AliFatal("Error while skipping tracks");
     }
     cout << "Skipping event " << ie << endl;
-  }  
-  fStartEvent = 0; // do not skip events the second time 
+  }
+  fStartEvent = 0; // do not skip events the second time
+
+  ///
+  Int_t consecutiveDiscardedEvents = 0;
+  ///
 
   while(1) {
     if (fVertexSmear == kPerEvent) Vertex();
-    Int_t nTracks = fReader->NextEvent(); 	
+    Int_t nTracks = fReader->NextEvent();
     if (nTracks == 0) {
       // printf("\n No more events !!! !\n");
       Warning("AliGenExtFile::Generate","\nNo more events in external file!!!\nLast event may be empty or incomplete.\n");
@@ -140,7 +160,7 @@ void AliGenExtFile::Generate()
     //    fForceDecay==kSemiElectronic) the event is rejected if NOT EVEN ONE
     //    child falls into the child-cuts.
     TParticle* iparticle = 0x0;
-    
+
     if(fCutOnChild) {
       // Count the selected children
       Int_t nSelected = 0;
@@ -215,10 +235,15 @@ void AliGenExtFile::Generate()
     selector.init();
     for (i = 0; i < nTracks; i++) {
        TParticle* jparticle = fReader->NextParticle();
-       selector.setData(i,
+       if(jparticle){
+	     selector.setData(i,
              jparticle->GetFirstMother(),
              jparticle->GetSecondMother(),
              KinematicSelection(jparticle,0));
+    	}
+       else{
+	     AliWarning(Form("Particle %d = NULL",i));
+       }
     }
     selector.reselectCuttedMothersAndRemapIDs();
     fReader->RewindEvent();
@@ -240,9 +265,9 @@ void AliGenExtFile::Generate()
 	p[1] = jparticle->Py();
 	p[2] = jparticle->Pz();
 	p[3] = jparticle->Energy();
-	
+
 	Int_t idpart = jparticle->GetPdgCode();
-	if(fVertexSmear==kPerTrack) 
+	if(fVertexSmear==kPerTrack)
 	{
 	    Rndm(random,6);
 	    for (j = 0; j < 3; j++) {
@@ -261,7 +286,7 @@ void AliGenExtFile::Generate()
 	    time = fTime + jparticle->T();
 	}
 	Int_t doTracking = fTrackIt && selected && (jparticle->TestBit(kTransportBit));
-	
+
 	PushTrack(doTracking, parent, idpart,
 		  p[0], p[1], p[2], p[3], origin[0], origin[1], origin[2], time,
 		  polar[0], polar[1], polar[2],
@@ -269,7 +294,47 @@ void AliGenExtFile::Generate()
 
 	KeepTrack(nt);
 	fNprimaries++;
+	SetHighWaterMark(nt);
     } // track loop
+
+    // User Trigger
+    if(fSetUserTrig){
+      AliStack *stack = AliRunLoader::Instance()->Stack();
+      if(!fUserTrigger(stack)){
+	stack->Clean();
+        consecutiveDiscardedEvents++;
+        if(consecutiveDiscardedEvents>fLimitDiscardedEvents){AliFatal(Form("More than %i events discarded consequently",fLimitDiscardedEvents));}
+        continue;
+      }
+      consecutiveDiscardedEvents=0;
+    }
+
+    // Base multiplicity trigger
+    if(fSetMultTrig){
+      AliInfo(Form("mult cut : %i",fMultCut));
+      AliStack *stack = AliRunLoader::Instance()->Stack();
+      if(!MultiplicityTrigger(stack)){
+	stack->Clean();
+        consecutiveDiscardedEvents++;
+        if(consecutiveDiscardedEvents>fLimitDiscardedEvents){AliFatal(Form("More than %i events discarded consequently",fLimitDiscardedEvents));}
+        continue;
+      }
+      consecutiveDiscardedEvents=0;
+    }
+
+    // Base pT trigger
+    if(fSetPtTrig){
+      AliInfo(Form("pT cut : %f GeV/c",fPtCut));
+      AliStack *stack = AliRunLoader::Instance()->Stack();
+      if(!PtTrigger(stack)){
+	stack->Clean();
+        consecutiveDiscardedEvents++;
+        if(consecutiveDiscardedEvents>fLimitDiscardedEvents){AliFatal(Form("More than %i events discarded consequently",fLimitDiscardedEvents));}
+        continue;
+      }
+      consecutiveDiscardedEvents=0;
+    }
+    ///
 
     // Generated event header
     AliGenEventHeader * header = fReader->GetGenEventHeader();
@@ -280,10 +345,9 @@ void AliGenExtFile::Generate()
     header->SetInteractionTime(fTime);
     AddHeader(header);
     break;
-    
+
   } // event loop
-  
-  SetHighWaterMark(nt);
+
   CdEventFile();
 }
 
@@ -293,8 +357,32 @@ void AliGenExtFile::CdEventFile()
 // CD back to the event file
   AliRunLoader::Instance()->CdGAFile();
 }
+//__________________________________________________________
+Bool_t AliGenExtFile::MultiplicityTrigger(AliStack *stack){
+  Int_t nTracks  = stack->GetNtrack();
+  AliInfo(Form("n Tracks = %i",nTracks));
+  if(nTracks>fMultCut){return kTRUE;}
+  else{
+    AliInfo(Form("n Tracks < %i --> EVENT DISCARDED",fMultCut));
+    return kFALSE;
+  }
+}
+//__________________________________________________________
+Bool_t AliGenExtFile::PtTrigger(AliStack *stack){
+  Int_t nTracks  = stack->GetNtrack();
 
+  Int_t partCounter = 0;                                                        // counter of particles with pT > pT threshold
+  for(int i = 0;i < nTracks;i++){
+    TParticle *track = (TParticle*) stack->Particle(i);
+    if(track->Pt() > fPtCut){
+      AliInfo(Form("pT = %f",track->Pt()));
+      partCounter++;
+    }
+  }
 
-
-
-
+  if(partCounter>0){return kTRUE;}
+  else{
+    AliInfo(Form("No particle with pT > %f GeV/c --> EVENT DISCARDED",fPtCut));
+    return kFALSE;
+  }
+}

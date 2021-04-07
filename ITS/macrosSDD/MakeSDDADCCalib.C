@@ -6,6 +6,7 @@
 #include <TGraphErrors.h>
 #include <TROOT.h>
 #include <TFile.h>
+#include <TLine.h>
 #include <TTree.h>
 #include <TGrid.h>
 #include <TGridResult.h>
@@ -81,11 +82,13 @@ void MakeSDDADCCalib(Int_t run = 245705,TString foldname = "15o_Bunch4",TString 
     
   //****************** Connection to alien *****************************************
     
-  TGrid::Connect("alien://",0,0,"t");
-  //TGrid *gGrid = TGrid::Connect("alien");
-  if(!gGrid||!gGrid->IsConnected()) {
-    printf("gGrid not found! exit macro\n");
-    return;
+  if(!readLocal){
+    TGrid::Connect("alien://",0,0,"t");
+    //TGrid *gGrid = TGrid::Connect("alien");
+    if(!gGrid||!gGrid->IsConnected()) {
+      printf("gGrid not found! exit macro\n");
+      return;
+    }
   }
     
   const Int_t nDrTimeBin = 8;
@@ -138,7 +141,14 @@ void MakeSDDADCCalib(Int_t run = 245705,TString foldname = "15o_Bunch4",TString 
     
   if(!fin)return;
   TString lname = Form("clistSDDCalib");
-  TList *cOutput = (TList*)fin->Get(lname.Data());
+  TList *cOutput= 0x0;
+  if(filename.Contains("CalibObjects")) cOutput = (TList*)fin->Get(lname.Data());
+  else{
+    TDirectoryFile* drf=(TDirectoryFile*)fin->Get("ITSAlignQA");
+    lname="clistITSAlignQA";
+    if(drf) cOutput = (TList*)drf->Get(lname.Data());
+  }
+  
   if(!cOutput) {
     Printf("E: Cannot open TList %s",lname.Data());
     return;
@@ -160,6 +170,19 @@ void MakeSDDADCCalib(Int_t run = 245705,TString foldname = "15o_Bunch4",TString 
   textbadFit->SetTextFont(63);
   textbadFit->SetTextColor(2);
   textbadFit->SetTextSize(28);
+
+  TLine* refLine=new TLine(0.,84.,6400.,84.);
+  refLine->SetLineColor(kGreen+1);
+  refLine->SetLineWidth(2);
+  refLine->SetLineStyle(2);
+  TLine* refLineL=new TLine(0.,79.,6400.,79.);
+  refLineL->SetLineColor(kRed-7);
+  refLineL->SetLineWidth(2);
+  refLineL->SetLineStyle(3);
+  TLine* refLineH=new TLine(0.,89.,6400.,89.);
+  refLineH->SetLineColor(kRed-7);
+  refLineH->SetLineWidth(2);
+  refLineH->SetLineStyle(3);
 
   //    for(Int_t ihist = 6; ihist < 7; ihist++){//loop on modules
   for(Int_t ihist = 0; ihist < nModules; ihist++){//loop on modules
@@ -249,7 +272,7 @@ void MakeSDDADCCalib(Int_t run = 245705,TString foldname = "15o_Bunch4",TString 
       hmpv->SetMinimum(0.95*minMPV);
       hmpv->SetMaximum(1.02*maxMPV);
     }
-    TF1 *pol1mpv = new TF1("pol1mpv","pol1mpv",0,6400);
+    TF1 *pol1mpv = new TF1("pol1mpv","pol1",0,6400);
     //Mod 469 only one part of the dr Time region is full 
     if(imod==469) maxFit=3000;
     if(hmpv->GetEntries()<=3) pol1mpv->FixParameter(1,0);
@@ -264,8 +287,13 @@ void MakeSDDADCCalib(Int_t run = 245705,TString foldname = "15o_Bunch4",TString 
       pol1mpv->SetParameter(1,0);
     }
     chdEdxproj->cd(nDrTimeBin+1);
+    if(hmpv->GetMaximum()<85) hmpv->SetMaximum(85);
+    if(hmpv->GetMinimum()>83) hmpv->SetMinimum(83);
     hmpv->Draw();
     pol1mpv->Draw("same");
+    refLine->Draw("same");
+    if(hmpv->GetMinimum()<79) refLineL->Draw("same");
+    if(hmpv->GetMaximum()>89)refLineH->Draw("same");
     chdEdxproj->Update();
     if(firstpage){
       chdEdxproj->Print("LanGausFits.pdf(");
@@ -287,7 +315,7 @@ void MakeSDDADCCalib(Int_t run = 245705,TString foldname = "15o_Bunch4",TString 
     //        cmod->Update();
     //        hmpv->Reset("M");
         
-    TF1 *pol1sig = new TF1("pol1sig","pol1sig",0,6400);
+    TF1 *pol1sig = new TF1("pol1sig","pol1",0,6400);
     if(hsig->GetEntries()>2){
       hsig->Fit(pol1sig,"0NQ","",minFit,maxFit);
     }
@@ -302,7 +330,7 @@ void MakeSDDADCCalib(Int_t run = 245705,TString foldname = "15o_Bunch4",TString 
     //        cmod->Update();
     //        hsig->Reset("M");
         
-    TF1 *pol1sigl = new TF1("pol1sigl","pol1sigl",0,6400);
+    TF1 *pol1sigl = new TF1("pol1sigl","pol1",0,6400);
     if(hsigl->GetEntries()>2){
       hsigl->Fit(pol1sigl,"0NQ","",minFit,maxFit);
     }

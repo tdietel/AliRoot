@@ -157,6 +157,7 @@
 #include "AliESDpid.h"
 #include "AliESDtrack.h"
 #include "AliESDtrack.h"
+#include "AliESDUtils.h"
 #include "AliEventInfo.h"
 #include "AliGRPObject.h"
 #include "AliGRPRecoParam.h"
@@ -204,6 +205,7 @@
 #include "ARVersion.h"
 #include "AliMCEventHandler.h"
 #include "AliMCEvent.h"
+#include "AliPID.h"
 #include <RVersion.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -228,6 +230,7 @@ AliReconstruction::AliReconstruction(const char* gAliceFilename) :
   fRunV0Finder(kTRUE),
   fRunCascadeFinder(kTRUE),
   fRunMultFinder(kTRUE),
+  fRunCustomPileupFinders(kTRUE),
   fStopOnError(kTRUE),
   fStopOnMissingTriggerFile(kTRUE),
   fWriteAlignmentData(kFALSE),
@@ -379,6 +382,7 @@ AliReconstruction::AliReconstruction(const AliReconstruction& rec) :
   fRunV0Finder(rec.fRunV0Finder),
   fRunCascadeFinder(rec.fRunCascadeFinder),
   fRunMultFinder(rec.fRunMultFinder),
+  fRunCustomPileupFinders(rec.fRunCustomPileupFinders),
   fStopOnError(rec.fStopOnError),
   fStopOnMissingTriggerFile(rec.fStopOnMissingTriggerFile),
   fWriteAlignmentData(rec.fWriteAlignmentData),
@@ -548,6 +552,7 @@ AliReconstruction& AliReconstruction::operator = (const AliReconstruction& rec)
   fRunV0Finder           = rec.fRunV0Finder;
   fRunCascadeFinder      = rec.fRunCascadeFinder;
   fRunMultFinder         = rec.fRunMultFinder;
+  fRunCustomPileupFinders = rec.fRunCustomPileupFinders;
   fStopOnError           = rec.fStopOnError;
   fStopOnMissingTriggerFile = rec.fStopOnMissingTriggerFile;
   fWriteAlignmentData    = rec.fWriteAlignmentData;
@@ -2252,7 +2257,10 @@ Bool_t AliReconstruction::ProcessEvent(Int_t iEvent)
     for (Int_t iDet = 0; iDet < kNDetectors; iDet++) {
       if (fTracker[iDet]) { // some trackers need details about the run/time
 	fTracker[iDet]->SetTimeStamp(fesd->GetTimeStamp());
-	fTracker[iDet]->SetRunNumber(fesd->GetRunNumber());
+	fTracker[iDet]->SetOrbitNumber(fesd->GetOrbitNumber());
+	fTracker[iDet]->SetPeriodNumber(fesd->GetPeriodNumber());
+	fTracker[iDet]->SetBunchCrossNumber(fesd->GetBunchCrossNumber());
+	fTracker[iDet]->SetRunNumber(fesd->GetRunNumber());	
       }
       //RS also some reconstructructors may need the time stamp
       if (fReconstructor[iDet]) fReconstructor[iDet]->SetTimeStamp(fesd->GetTimeStamp());
@@ -2557,9 +2565,16 @@ Bool_t AliReconstruction::ProcessEvent(Int_t iEvent)
        if (fStopOnError) {CleanUp(); return kFALSE;}
     }
 
+    if (fRunCustomPileupFinders) {
+      if (!RunCustomPileUpFinders(fesd)) {
+	if (fStopOnError) {CleanUp(); return kFALSE;}
+      }
+    }
+    
     AliSysInfo::AddStamp(Form("FillVaria_%d",iEvent), 0,0,iEvent); 
 
     // write ESD
+    fesd->SetTPCTrackBeforeClean(fesd->GetNumberOfTPCTracks()); // store NTPC tracks before clean
     UInt_t specie = fesd->GetEventSpecie();
     Bool_t keepAll = (specie==AliRecoParam::kCosmic || specie==AliRecoParam::kCalib);
     if (!keepAll) {
@@ -5209,4 +5224,26 @@ void AliReconstruction::SetRun1PIDforTracking(Bool_t val)
   AliESDpid::SetUseElectronExclusionBands(val); // true in run1
   AliESDpid::SetNSpeciesForTracking(val ? AliPID::kSPECIES : AliPID::kSPECIESC); // 5/9 in run1/run2
   AliESDtrack::SetTrackEMuAsPi(!val); // false/true in run1/run2
+}
+
+//___________________________________________________
+void AliReconstruction::SetPIDforTrackingOptimisedForNuclei(Int_t val, AliPID::EParticleType type)
+{
+  // set/unset pid for tracking as in Run1
+  AliInfoF("Impose PID for tracking optimised for nuclei, dE/dx threshold between 3He and pi: %i",val);
+  AliESDpid::SetOnly3HeOrPi(val, type);
+  
+}
+
+//___________________________________________________
+Bool_t AliReconstruction::RunCustomPileUpFinders(AliESDEvent*& esd)
+{
+  // put into the ESD header custom pile-up info
+  static TVectorF vtiTPC(10), vtiITS(8);
+  AliESDUtils::GetTPCPileupVertexInfo(esd, vtiTPC);
+  AliESDUtils::GetITSPileupVertexInfo(esd, vtiITS);
+  AliESDHeader* esdheader = esd->GetHeader();
+  esdheader->SetTPCPileUpInfo(&vtiTPC);
+  esdheader->SetITSPileUpInfo(&vtiITS);
+  return kTRUE;
 }

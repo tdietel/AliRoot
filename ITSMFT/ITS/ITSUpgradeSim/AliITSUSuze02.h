@@ -1,6 +1,7 @@
 #ifndef ALIITSUSUZE02_H
 #define ALIITSUSUZE02_H
 
+#include <Rtypes.h>
 #include "TMatrixFfwd.h"
 class TH1F;
 

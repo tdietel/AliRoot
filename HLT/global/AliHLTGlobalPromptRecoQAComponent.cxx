@@ -61,24 +61,26 @@
 #include "AliSysInfo.h"
 #include "AliHLTSAPTrackerData.h"
 #include "AliFlatESDVertex.h"
-#include "AliHLTTPCCADefinitions.h"
-#include "AliHLTTPCCASliceOutput.h"
-#include "AliHLTTRDDefinitions.h"
+#include "GPUTPCDefinitions.h"
+#include "GPUTPCSliceOutput.h"
 #include "AliHLTEMCALDefinitions.h"
 #include "AliHLTTPCHWCFData.h"
 #include "AliHLTTPCdEdxData.h"
 #include "AliHLTTRDDefinitions.h"
-#include "AliHLTTRDTrackletWord.h"
-#include "AliHLTTRDTrackData.h"
+#include "GPUTRDTrackletWord.h"
+#include "GPUTRDTrackData.h"
 #include "AliGRPManager.h"
 #include "AliGRPObject.h"
 #include "TMath.h"
 
 #include "TH2F.h"
 #include "TH1D.h"
+#include "TObjString.h"
 #include <string>
 #include "AliHLTITSClusterDataFormat.h"
 #include "AliHLTCDHWrapper.h"
+
+using namespace GPUCA_NAMESPACE::gpu;
 
 /** ROOT macro for the implementation of ROOT specific class methods */
 ClassImp(AliHLTGlobalPromptRecoQAComponent)
@@ -304,7 +306,7 @@ void AliHLTGlobalPromptRecoQAComponent::GetInputDataTypes(AliHLTComponentDataTyp
   list.push_back(AliHLTTRDDefinitions::fgkTRDTrackletDataType); //TRD Tracklets
   list.push_back(AliHLTTRDDefinitions::fgkTRDTrackDataType|kAliHLTDataOriginTRD); //TRD Tracks
 
-  list.push_back(AliHLTTPCCADefinitions::fgkTrackletsDataType); //HLT-TPC Tracklets (before TPC global merger)
+  list.push_back(GPUTPCDefinitions::fgkTrackletsDataType); //HLT-TPC Tracklets (before TPC global merger)
   list.push_back(kAliHLTDataTypeTrack | kAliHLTDataOriginTPC); //HLT-TPC merged tracks
   list.push_back(kAliHLTDataTypeTrack | kAliHLTDataOriginITS); //TPC-ITS tracks
   list.push_back(kAliHLTDataTypeTrack | kAliHLTDataOriginITSOut); //ITS-Out merged tracks
@@ -544,7 +546,7 @@ int AliHLTGlobalPromptRecoQAComponent::DoInit(int argc, const char** argv)
   //End Common Axes
 
   //fixed axes - used by fixed histograms
-  //set nbins to 0 to disable the histograms using an axis
+  //set nbins to something negative to disable the histograms using an axis
   static double fakePtr = 0.;
   fAxes["tpcTrackPt"].set( 100, 0., 5., &fakePtr );
   fAxes["tpcClusterCharge"].set( 100, 0, 499, &fakePtr );
@@ -555,7 +557,7 @@ int AliHLTGlobalPromptRecoQAComponent::DoInit(int argc, const char** argv)
   fAxes["dEdx"].set( 300, 10., 3000., &fakePtr );
   fAxes["tpcClusterFlags"].set( 8, 0, 7, &fakePtr );
   fAxes["trdHCId"].set( 1080, 0, 1079, &fakePtr );
-  fAxes["ITSSPDvertexZ"].set( 100, -100., 100., &fITSSPDvertexZ );
+  fAxes["ITSSPDvertexZ"].set( 200, -100., 100., &fITSSPDvertexZ );
 
   //Start Histograms
   NewHistogram(",fHistSPDclusters_SPDrawSize,SPD clusters vs SPD raw size,rawSizeSPD,nClustersSPD");
@@ -590,11 +592,18 @@ int AliHLTGlobalPromptRecoQAComponent::DoInit(int argc, const char** argv)
   NewHistogram("CINT7,fHistITSSAtracks_SPDclusters,ITSSAP tracks vs SPD clusters,nClustersSPD,nITSSAPtracks");
   NewHistogram("MUFAST,fHistITSSAtracks_SSDclusters,ITSSAP tracks vs SSD clusters,nClustersSSD,nITSSAPtracks");
   NewHistogram("CINT7,fHistITSSAtracks_SSDclusters,ITSSAP tracks vs SSD clusters,nClustersSSD,nITSSAPtracks");
+
   //End Histograms
 
   fpHWCFData = new AliHLTTPCHWCFData;
 
   setlocale(LC_NUMERIC, ""); //Make printf with 1000 separators work
+
+  //then process the options from OCDB
+  TObjString* cdbString = dynamic_cast<TObjString*>(LoadAndExtractOCDBObject("HLT/ConfigHLT/GlobalPromptRecoQAComponent"));
+  if (cdbString) {
+    ProcessOptionString(cdbString->GetString());
+  }
 
   //parse the config string AFTER the defaults are set
   if (ProcessOptionString(GetComponentArgs())<0)
@@ -637,7 +646,7 @@ static void ReBinLogX(TAxis* axis)
   }
   axis->Set(bins, new_bins);
   delete [] new_bins;
-} 
+}
 
 //__________________________________________________________________________________________________
 void AliHLTGlobalPromptRecoQAComponent::CreateFixedHistograms()
@@ -808,10 +817,12 @@ void AliHLTGlobalPromptRecoQAComponent::NewHistogram(
     HLTWarning("empty variable %s",yname.c_str());
     return;
   }
+
   delete hist.hist; hist.hist=NULL;
-  if (x.bins==0 || y.bins==0)
+
+  if (x.bins<0 || y.bins<0 || (x.bins==0 && y.bins==0))
   {
-    HLTInfo("hist %s disabled, axis has zero bins",histName.c_str());
+    HLTWarning("hist %s disabled by negative number of bins set or both axes have zero bins",histName.c_str());
     fHistograms.erase(histName);
     return;
   }
@@ -844,6 +855,7 @@ void AliHLTGlobalPromptRecoQAComponent::NewHistogram(
   hist.x = *ax;
   hist.y = y;
   hist.trigger = trigName;
+  hist.triggerIsRegex = std::string::npos != trigName.find_first_of("^$.[]+?|");
   hist.config=config;
   //register which axes we're using
   fAxes[xname].histograms[histName]=true;
@@ -929,7 +941,14 @@ int AliHLTGlobalPromptRecoQAComponent::FillHistograms()
     const AliHLTCTPData* ctp = CTPData();
     if (ctp && !hist.trigger.empty())
     {
-      triggerMatched=ctp->MatchTriggerRE(hist.trigger.c_str());
+      if (hist.triggerIsRegex)
+      {
+        triggerMatched=ctp->MatchTriggerRE(hist.trigger.c_str());
+      }
+      else
+      {
+        triggerMatched=ctp->MatchTriggerGlob(hist.trigger.c_str());
+      }
     }
 
 
@@ -947,10 +966,13 @@ int AliHLTGlobalPromptRecoQAComponent::FillHistograms()
 //__________________________________________________________________________________________________
 int histStruct::Fill()
 {
-  if (x.value && (*x.value) && ((y.value)?(*y.value):1) )
+  //we are filtering out values which are exacly zero.
+  //don't remeber exactly why but probably some invalid values caused spikes? is this the right way to go?
+  bool fill = x.value && (*x.value!=0.) && ((y.value)?(*y.value!=0.):true);
+  if (fill)
   {
     if (!hist) return 0;
-    hist->Fill(*x.value, (y.value)?(*y.value):0.);
+    hist->Fill(*x.value, (y.value)?(*y.value):1.);
     return 1;
   }
   return 0;
@@ -1059,7 +1081,7 @@ int AliHLTGlobalPromptRecoQAComponent::DoEvent( const AliHLTComponentEventData& 
     memset(clusterRAWblocks, 0, sizeof(clusterRAWblocks));
   }
 
-  AliHLTFloat32_t *dEdxTPCOffline = NULL; 
+  AliHLTFloat32_t *dEdxTPCOffline = NULL;
   Int_t ndEdxTPCOffline = 0;
   AliHLTTPCdEdxData* dEdxInfo = NULL;
 
@@ -1336,9 +1358,9 @@ int AliHLTGlobalPromptRecoQAComponent::DoEvent( const AliHLTComponentEventData& 
     }
 
     //numbers of tracks
-    if (iter->fDataType == AliHLTTPCCADefinitions::fgkTrackletsDataType) //HLT-TPC CA-trackets (before TPC global merger)
+    if (iter->fDataType == GPUTPCDefinitions::fgkTrackletsDataType) //HLT-TPC CA-trackets (before TPC global merger)
     {
-      AliHLTTPCCASliceOutput* out = reinterpret_cast<AliHLTTPCCASliceOutput*>(iter->fPtr);
+      GPUTPCSliceOutput* out = reinterpret_cast<GPUTPCSliceOutput*>(iter->fPtr);
       nTPCtracklets += out->NTracks();
     }
 
@@ -1365,8 +1387,8 @@ int AliHLTGlobalPromptRecoQAComponent::DoEvent( const AliHLTComponentEventData& 
     //TRD Tracklets
     if (iter->fDataType == AliHLTTRDDefinitions::fgkTRDTrackletDataType)
     {
-      AliHLTTRDTrackletWord* tracklets = reinterpret_cast<AliHLTTRDTrackletWord*>( iter->fPtr );
-      int nTRDTrackletsTotal = iter->fSize / sizeof(AliHLTTRDTrackletWord);
+      GPUTRDTrackletWord* tracklets = reinterpret_cast<GPUTRDTrackletWord*>( iter->fPtr );
+      int nTRDTrackletsTotal = iter->fSize / sizeof(GPUTRDTrackletWord);
       nTRDTracklets += nTRDTrackletsTotal;
       if (fHistTRDHCId)
       {
@@ -1380,7 +1402,7 @@ int AliHLTGlobalPromptRecoQAComponent::DoEvent( const AliHLTComponentEventData& 
     //TRD Tracks
     if (iter->fDataType == (AliHLTTRDDefinitions::fgkTRDTrackDataType|kAliHLTDataOriginTRD))
     {
-      AliHLTTRDTrackData* outTracks = (AliHLTTRDTrackData*) (iter->fPtr);
+      GPUTRDTrackData* outTracks = (GPUTRDTrackData*) (iter->fPtr);
       nTRDTracks += outTracks->fCount;
     }
 

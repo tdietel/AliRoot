@@ -27,6 +27,10 @@ def make(dataType,origin,payloadSize):
 
 # this function just prints the header values according to the format string
 def dump(header):
-    unpacked = struct.unpack(O2fmtString,header)
+  magic = struct.unpack("<4s", header[0:4])
+  if magic[0]=="O2O2":
+    unpacked = struct.unpack(O2fmtString,header[0:80])
     print unpacked
+  else:
+    print ""
 

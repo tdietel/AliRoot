@@ -29,6 +29,8 @@
 #include "AliESDEvent.h"
 #include "AliESDVZERO.h"
 #include "AliVertexerTracks.h"
+#include "TClonesArray.h"
+#include "AliMathBase.h"
 
 //______________________________________________________________________________
 Float_t AliESDUtils::GetCorrV0(const AliVEvent* esd, Float_t &v0CorrResc, Float_t *v0multChCorr, Float_t *v0multChCorrResc)
@@ -153,7 +155,8 @@ Float_t AliESDUtils::GetCorrSPD2(Float_t spd2raw,Float_t zv)
 }  
 
 //______________________________________________________________________________
-TObjArray*  AliESDUtils::RefitESDVertexTracks(AliESDEvent* esdEv, Int_t algo, const Double_t *cuts)
+TObjArray*  AliESDUtils::RefitESDVertexTracks(AliESDEvent* esdEv, Int_t algo, const Double_t *cuts,
+					      TClonesArray* extDest)
 {
   // Refit ESD VertexTracks and redo tracks->RelateToVertex
   // Default vertexin algorithm is 6 (multivertexer). To use old vertexed, use algo=1
@@ -211,18 +214,27 @@ TObjArray*  AliESDUtils::RefitESDVertexTracks(AliESDEvent* esdEv, Int_t algo, co
     initVertex.Print();
   }
   //
-  // reset old vertex info
-  if (esdEv->GetPileupVerticesTracks()) esdEv->GetPileupVerticesTracks()->Clear();
-  ((AliESDVertex*)esdEv->GetPrimaryVertexTracks())->SetNContributors(-1);
-  //
+  if (extDest) {
+    vtFinder->SetExternalDestination(extDest);
+  }
+  else { // will modify esdEvent
+    // reset old vertex info
+    if (esdEv->GetPileupVerticesTracks()) esdEv->GetPileupVerticesTracks()->Clear("C");
+    static AliESDVertex vtxDummy(0,0,0,"PrimaryVertex");
+    esdEv->SetPrimaryVertexTracks(&vtxDummy);
+    //
+  }
   AliESDVertex *pvtx=vtFinder->FindPrimaryVertex(esdEv);
+  vtFinder->SetExternalDestination(0); // detach external array
   if (pvtx) {
-    if (pvtx->GetStatus()) {
-      esdEv->SetPrimaryVertexTracks(pvtx);
-      for (Int_t i=esdEv->GetNumberOfTracks(); i--;) {
-	AliESDtrack *t = esdEv->GetTrack(i);
-	Double_t x[3]; t->GetXYZ(x);
-	t->RelateToVertex(pvtx, bkgauss, kVeryBig);
+    if (!extDest) {
+      if (pvtx->GetStatus()) {
+	esdEv->SetPrimaryVertexTracks(pvtx);
+	for (Int_t i=esdEv->GetNumberOfTracks(); i--;) {
+	  AliESDtrack *t = esdEv->GetTrack(i);
+	  Double_t x[3]; t->GetXYZ(x);
+	  t->RelateToVertex(pvtx, bkgauss, kVeryBig);
+	}
       }
     }
     delete pvtx;
@@ -257,4 +269,117 @@ Float_t AliESDUtils::GetCorrV0A0(Float_t  v0a0raw, Float_t zv)
   zv -= pars[0];
   Float_t corr = 1 + zv*(pars[1] + zv*pars[2]);
   return corr>0 ? v0a0raw/corr : -1;
+}
+
+//________________________________________________________________________
+void AliESDUtils::GetTPCPileupVertexInfo(const AliESDEvent* event, TVectorF& vertexInfo)
+{
+  vertexInfo.ResizeTo(10);
+  vertexInfo.Zero();
+
+  const Int_t nNumberOfTracks = event->GetNumberOfTracks();
+  const Int_t bufSize = 20000;
+  const Float_t kMinDCA = 3;
+  const Float_t kMinDCAZ = 5;
+  Double_t bufferP[bufSize], bufferM[bufSize];
+  Int_t counterP = 0, counterM = 0;
+  Float_t dcaXY, dcaZ;
+  for (Int_t iTrack = 0; iTrack < nNumberOfTracks; iTrack++) {
+    AliESDtrack *track = event->GetTrack(iTrack);
+    if (track == nullptr) continue;
+    if (track->IsOn(0x1)) continue;
+    //if (TMath::Abs(track->GetTgl())>1) continue;
+    if (track->HasPointOnITSLayer(0)) continue;
+    if (track->HasPointOnITSLayer(1)) continue;
+    const AliExternalTrackParam *param = track->GetInnerParam();
+    if (!param) continue;
+    // A-side c side cut
+    //if (param->GetTgl()*param->GetZ()<0) continue;
+    track->GetImpactParameters(dcaXY, dcaZ);
+    if (TMath::Abs(dcaXY) > kMinDCA) continue;
+    if (TMath::Abs(dcaZ) < kMinDCAZ) continue;
+
+    const Double_t tgl = track->Pz() / track->Pt();
+    if (tgl > 0.0) {
+      bufferP[counterP++] = track->GetZ();
+    }
+    if (tgl < -0.0) {
+      bufferM[counterM++] = track->GetZ();
+    }
+  }
+
+  Double_t posZA = (counterP > 0) ? TMath::Median(counterP, bufferP) : 0;
+  Double_t posZC = (counterM > 0) ? TMath::Median(counterM, bufferM) : 0;
+  Double_t posZALTM=0,posZCLTM=0, rmsZALTM=0,rmsZCLTM=0;
+  if (counterP>4) AliMathBase::EvaluateUni(counterP, bufferP, posZALTM, rmsZALTM, int(counterP*0.65));
+  if (counterM>4) AliMathBase::EvaluateUni(counterM, bufferM, posZCLTM, rmsZCLTM, int(counterM*0.65));
+
+  vertexInfo[0] = posZA;
+  vertexInfo[1] = -posZC;
+  vertexInfo[2] = (-posZC+posZA)*0.5;
+  vertexInfo[3] = counterP;
+  vertexInfo[4] = counterM;
+  vertexInfo[5] = (counterP+counterM);
+  vertexInfo[6] = posZALTM;
+  vertexInfo[7] = posZCLTM;
+  vertexInfo[8] = rmsZALTM;
+  vertexInfo[9] = rmsZCLTM;
+}
+
+//________________________________________________________________________
+void AliESDUtils::GetITSPileupVertexInfo(const AliESDEvent* event, TVectorF& vertexInfo,
+					 Double_t dcaCut, Double_t dcaZcut)
+{
+  vertexInfo.ResizeTo(8);
+  vertexInfo.Zero();
+  
+  const Int_t kNCRCut=80;
+  const Double_t kDCACut=0.3;
+  const Float_t knTrackletCut=1.5;
+
+  Int_t nTracks=event->GetNumberOfTracks();
+  const Int_t knBuffer=20000;
+  Double_t bufferPrim[knBuffer], bufferPileUp[knBuffer];
+  Int_t nBufferPrim=0, nBufferPileUp=0;
+  for (Int_t iTrack=0; iTrack<nTracks; iTrack++){
+    AliESDtrack * pTrack = event->GetTrack(iTrack);
+    Float_t dcaXY,dcaz;
+    if (pTrack== nullptr) continue;
+    if (pTrack->IsOn(AliVTrack::kTPCin)==0) continue;
+    if (pTrack->GetTPCClusterInfo(3,1)<kNCRCut) continue;
+    pTrack->GetImpactParameters(dcaXY,dcaz);
+    if (TMath::Abs(dcaXY)>kDCACut) continue;
+    if (TMath::Abs(dcaXY)>dcaCut) continue;
+    pTrack->SetESDEvent(event);
+    if (pTrack->HasPointOnITSLayer(0)==0) continue;
+    if (pTrack->HasPointOnITSLayer(1)==0) continue;
+    if (TMath::Abs(dcaz)<dcaZcut){
+      bufferPrim[nBufferPrim]=pTrack->GetZ();
+      nBufferPrim++;
+    }else{
+      bufferPileUp[nBufferPileUp]=pTrack->GetZ();
+      nBufferPileUp++;
+    }
+  }
+  /// median position
+  vertexInfo[0]=(nBufferPrim>0)?TMath::Median(nBufferPrim,bufferPrim):0;
+  vertexInfo[1]=(nBufferPileUp>0)?TMath::Median(nBufferPileUp, bufferPileUp):0;
+  // multiplicity
+  vertexInfo[2]=nBufferPrim;
+  vertexInfo[3]=nBufferPileUp;
+  /// LTM
+  Double_t LTM, RMS;
+  if (nBufferPrim>2) {
+    AliMathBase::EvaluateUni(nBufferPrim, bufferPrim, LTM,RMS, 0.95*nBufferPrim);
+    vertexInfo[4]=LTM;
+    vertexInfo[5]=RMS;
+  }
+  if (nBufferPileUp>3) {
+    Int_t nPoints= 0.7*nBufferPileUp;
+    if (nPoints<3) nPoints=3;
+    AliMathBase::EvaluateUni(nBufferPileUp, bufferPileUp, LTM,RMS, nPoints);
+    vertexInfo[6]=LTM;
+    vertexInfo[7]=RMS;
+  }
+  //
 }

@@ -19,10 +19,12 @@
 //#include "TRD/AliTRDpidESD.h"
 
 #include "AliPIDResponse.h"
+#include "AliPID.h"
 
 class AliESDEvent;
 class AliVEvent;
 class AliVParticle;
+//class AliPID;
 
 class AliESDpid : public AliPIDResponse  {
 public:
@@ -51,16 +53,21 @@ AliESDpid& operator=(const AliESDpid& a){if (this==&a) return *this; AliPIDRespo
   Float_t GetNMaxSigmaTOFTPCMismatch() const {return fRangeTOFMismatch;}
 
   void SetEventHandler(AliVEventHandler *event){fEventHandler=event;};
+
+  virtual void SetEventPileupProperties(const AliVEvent* vevent);
   
   static void       SetUseElectronExclusionBands(Bool_t val);
   static Bool_t     GetUseElectronExclusionBands()           {return fgUseElectronExclusionBands;}
   static void       SetNSpeciesForTracking(Int_t n);
   static Int_t      GetNSpeciesForTracking()                 {return fgNSpeciesForTracking;}
-
+  static void       SetOnly3HeOrPi(Int_t val, AliPID::EParticleType type = AliPID::kHe3);
+  static Int_t      GetOnly3HeOrPi()                         {return fgOnly3HeOrPi;}
 
  protected:
   virtual Float_t GetSignalDeltaTOFold(const AliVParticle *track, AliPID::EParticleType type, Bool_t ratio=kFALSE) const;
   virtual Float_t GetNumberOfSigmasTOFold(const AliVParticle *track, AliPID::EParticleType type) const;
+  virtual Float_t GetExpectedSignalTOFold(const AliVParticle *vtrack, AliPID::EParticleType type) const;
+  virtual Float_t GetExpectedSigmaTOFold(const AliVParticle *vtrack, AliPID::EParticleType type) const;
 
 private:
 
@@ -69,8 +76,10 @@ private:
 
   static Bool_t     fgUseElectronExclusionBands; // if true, exclude electron tag in e/K and e/p crossing (a la Run1)
   static Int_t      fgNSpeciesForTracking;       // number of species to consider for tracking PID
+  static Int_t      fgOnly3HeOrPi;               // if !=0 particles are either tracked as 3He (if dE/dx > that this value) or as pion (if dE/dx < that this value) 
+  static AliPID::EParticleType fgParticleTypeNucleiTracking; // particle type for special recostruction for nuclei  
   
-  ClassDef(AliESDpid,7)  // PID calculation class
+  ClassDef(AliESDpid,9)  // PID calculation class
 };
 
 

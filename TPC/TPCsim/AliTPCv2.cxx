@@ -314,6 +314,22 @@ void AliTPCv2::CreateGeometry()
   v2->AddNode(v3,1); v2->AddNode(v4,1); 
   //
   v1->AddNode(v2,1);
+  //
+  //  Outer field cage guard rings. Inner placed in the drift gas, outer placed in the outer insulator (CO2)
+  //
+  TGeoTube *ogri = new TGeoTube(257.985,258.,0.6); // placed in the drift volume
+  TGeoTube *ogro = new TGeoTube(260.0676,260.0826,0.6); //placed in the outer insulator
+  //
+  TGeoVolume *ogriv = new TGeoVolume("TPC_OGRI",ogri,m3);
+  TGeoVolume *ogrov = new TGeoVolume("TPC_OGRO",ogro,m3);
+  //
+  for(Int_t i=0; i<24; i++){
+     v9->AddNode(ogriv,(i+1), new TGeoTranslation(0.,0.,(i+1)*10));
+     v9->AddNode(ogriv,(i+25), new TGeoTranslation(0.,0.,-(i+1)*10));
+     v2->AddNode(ogrov,(i+1), new TGeoTranslation(0.,0.,(i+1)*10));
+     v2->AddNode(ogrov,(i+25), new TGeoTranslation(0.,0.,-(i+1)*10));
+  }
+  //
   //--------------------------------------------------------------------
   // Tpc Inner INsulator (CO2) 
   // the cones, the central drum and the inner f.c. sandwich with a piece
@@ -549,6 +565,42 @@ void AliTPCv2::CreateGeometry()
   v1->AddNode(hvss,1,new TGeoTranslation(0.,0.,163.8)); 
   v9->AddNode(tv100,1);
   //
+  // guard rings for IFC - outer placed in inner insulator, inner placed in the drift gas (3 different radii)
+  // AL, 1.2 cm wide, 0.015 cm thick, volumes TPC_IGR1 - outer, TPC_IGR2-4 - inner
+  //
+  TGeoTube *igro = new TGeoTube(76.6624,76.6774,0.6);
+  TGeoTube *igrio = new TGeoTube(78.845,78.86,0.6); //outer part
+  TGeoTube *igrim = new TGeoTube(78.795,78.81,0.6);
+  TGeoTube *igric = new TGeoTube(78.785,78.8,0.6);
+  //
+  // volumes
+  //
+  TGeoVolume *igrov = new TGeoVolume("TPC_IGR1",igro,m3);
+  TGeoVolume *igriov = new TGeoVolume("TPC_IGR2",igrio,m3);
+  TGeoVolume *igrimv = new TGeoVolume("TPC_IGR3",igrim,m3);
+  TGeoVolume *igricv = new TGeoVolume("TPC_IGR4",igric,m3);
+  //
+  // outer guard rings for IFC placement - every 10 cm
+  //
+  for(Int_t i=0; i<24; i++){
+    v5->AddNode(igrov,(i+1), new TGeoTranslation(0.,0.,(i+1)*10));
+    v5->AddNode(igrov,(i+25), new TGeoTranslation(0.,0.,-(i+1)*10));
+  }
+  //
+  // inner guard rings for IFC placement
+  //
+  for(Int_t i=0; i<9; i++){
+    v9->AddNode(igricv,(i+1), new TGeoTranslation(0.,0.,(i+1)*10));
+    v9->AddNode(igricv,(i+10), new TGeoTranslation(0.,0.,-(i+1)*10));		
+  }
+  v9->AddNode(igrimv,1,new TGeoTranslation(0.,0.,100.));
+  v9->AddNode(igrimv,2,new TGeoTranslation(0.,0.,-100.));
+  //
+  for(Int_t i=0; i<13; i++){
+    v9->AddNode(igriov,i+1, new TGeoTranslation(0.,0.,100+(i+1)*10));
+    v9->AddNode(igriov,i+14, new TGeoTranslation(0.,0.,-(100+(i+1)*10)));
+  }
+  //
   // central drum 
   //
   // flange + sandwich
@@ -565,11 +617,11 @@ void AliTPCv2::CreateGeometry()
   //
   TGeoVolume *cflv = new TGeoVolume("TPC_CDR",cfl,m3);
   // sandwich
-  TGeoTubeSeg *cd1 = new TGeoTubeSeg(60.6224,61.19,71.1,0.2,119.2);
-  TGeoTubeSeg *cd2 = new TGeoTubeSeg(60.6262,61.1862,71.1,0.2,119.2);
-  TGeoTubeSeg *cd3 = new TGeoTubeSeg(60.6462,61.1662,71.1,0.2,119.2);
-  TGeoTubeSeg *cd4 = new TGeoTubeSeg(60.6562,61.1562,71.1,0.2,119.2);
-  TGeoTubeSeg *tepox4 = new TGeoTubeSeg(60.6224,61.19,71.1,359.8,0.8);
+  TGeoTubeSeg *cd1 = new TGeoTubeSeg(60.6224,61.19,69.8,0.05,119.95);
+  TGeoTubeSeg *cd2 = new TGeoTubeSeg(60.6262,61.1862,69.8,0.05,119.95);
+  TGeoTubeSeg *cd3 = new TGeoTubeSeg(60.6462,61.1662,69.8,0.05,119.95);
+  TGeoTubeSeg *cd4 = new TGeoTubeSeg(60.6562,61.1562,69.8,0.05,119.95);
+  TGeoTubeSeg *tepox4 = new TGeoTubeSeg(60.6224,61.19,69.8,359.95,0.05); //glue 0.1 deg
   //
   TGeoMedium *sm6 = gGeoManager->GetMedium("TPC_Prepreg1");
   TGeoMedium *sm8 = gGeoManager->GetMedium("TPC_Epoxyfm");
@@ -577,8 +629,16 @@ void AliTPCv2::CreateGeometry()
   TGeoVolume *cd2v = new TGeoVolume("TPC_CDR2",cd2,sm6);// prepreg1
   TGeoVolume *cd3v = new TGeoVolume("TPC_CDR3",cd3,sm8); //epoxy film
   TGeoVolume *cd4v = new TGeoVolume("TPC_CDR4",cd4,sm4); //nomex
-  TGeoVolume *tvep4 = new TGeoVolume("TPC_IFEPOX4",tepox4,smep);
-
+  TGeoVolume *tvep4 = new TGeoVolume("TPC_IFEPOX4",tepox4,smep); //epoxy glue
+  //
+  // joints between sections +/- 1 deg prepreg1 placed in nomex at lower and upper radius + 0.1 deg of glue (epoxy)
+  //
+  TGeoTubeSeg *cdjl = new TGeoTubeSeg(60.6562,60.6762,69.8,0.,1.0); //lower, to be rotated when positioned
+  TGeoTubeSeg *cdju = new TGeoTubeSeg(61.1362,61.1562,69.8,0.,1.0); //upper, to be rotated when positioned
+  //
+  TGeoVolume *cdjlv = new TGeoVolume("TPC_CDJL",cdjl,sm6);
+  TGeoVolume *cdjuv = new TGeoVolume("TPC_CDJU",cdju,sm6); 
+  //
   //
   // seals for central drum 2 copies
   //
@@ -609,16 +669,43 @@ void AliTPCv2::CreateGeometry()
   TGeoRotation *ref = new TGeoRotation("ref",90.,0.,90.,90.,180.,0.);
   //
   cd1v->AddNode(cd2v,1); cd2v->AddNode(cd3v,1); cd3v->AddNode(cd4v,1); //sandwich
-  // first segment  
-  cflv->AddNode(cd1v,1); cflv->AddNode(tvep4,1);
+  //
+  // joints, lower part and upper parts, placed in nomex
+  //
+  segrot = new TGeoRotation();
+  segrot->RotateZ(0.05);
+  cd4v->AddNode(cdjlv,1,segrot);
+  cd4v->AddNode(cdjuv,1,segrot);
+  segrot = new TGeoRotation();
+  segrot->RotateZ(118.95);
+  cd4v->AddNode(cdjlv,2,segrot);
+  cd4v->AddNode(cdjuv,2,segrot); 
+  //
+  // according to the conversion data segments had an additional rotation angle of 4.6 deg.
+  //
+  // first segment
+  segrot = new TGeoRotation();
+  segrot->RotateZ(4.6);
+  cflv->AddNode(cd1v,1,segrot); cflv->AddNode(tvep4,1,segrot);
   // second segment
   segrot = new TGeoRotation();
-  segrot->RotateZ(120.);
+  segrot->RotateZ(124.6);
   cflv->AddNode(cd1v,2,segrot); cflv->AddNode(tvep4,2,segrot);
   // third segment
   segrot = new TGeoRotation();
-  segrot->RotateZ(240.);
-  cflv->AddNode(cd1v,3,segrot); cflv->AddNode(tvep4,3,segrot);
+  segrot->RotateZ(244.6);
+  cflv->AddNode(cd1v,3,segrot); cflv->AddNode(tvep4,3,segrot); 
+  //
+  //  heating strips, 
+  //
+  TGeoTubeSeg *hstr = new TGeoTubeSeg(60.6124,60.6224,68.5,0.,1.25);
+  TGeoVolume *hstrv = new TGeoVolume("TPC_HSTR",hstr,m1); // air, caved out from cflv, first strip starts at 0 deg
+  for(Int_t i=0;i<144;i++){
+    Double_t alpha = 1.25 + i*2.5;
+    segrot = new TGeoRotation();
+    segrot->RotateZ(alpha);
+    cflv->AddNode(hstrv,i+1,segrot);
+  }
   //
   v1->AddNode(siv,1,new TGeoTranslation(0.,0.,-69.9));
   v1->AddNode(siv,2,new TGeoTranslation(0.,0.,69.9));
@@ -1693,7 +1780,7 @@ TGeoCompositeShape *tpcorh9 = new TGeoCompositeShape("tpcorh9", "tpcorh1-tpcorh2
 //
 // outer rod plug left
 //
-TGeoPcon *outplug = new TGeoPcon("outplug", 0.0, 360.0, 14); 
+TGeoPcon *outplug = new TGeoPcon("outplug", 0.0, 360.0, 13); 
 
 outplug->DefineSection(0, 0.5, 0.0, 2.2);
 outplug->DefineSection(1, 0.7, 0.0, 2.2);
@@ -1707,14 +1794,14 @@ outplug->DefineSection(5, 1.2, 1.55, 1.75);
 outplug->DefineSection(6, 1.2, 1.55, 2.2);
 outplug->DefineSection(7, 1.875, 1.55, 2.2);
 
-outplug->DefineSection(8, 1.875, 1.55, 2.2);
-outplug->DefineSection(9, 2.47, 1.75, 2.2);
 
-outplug->DefineSection(10, 2.47, 1.75, 2.08);
-outplug->DefineSection(11, 2.57, 1.8, 2.08);
+outplug->DefineSection(8, 2.47, 1.75, 2.2);
 
-outplug->DefineSection(12, 2.57, 1.92, 2.08);
-outplug->DefineSection(13, 2.95, 1.92, 2.08);
+outplug->DefineSection(9, 2.47, 1.75, 2.08);
+outplug->DefineSection(10, 2.57, 1.8, 2.08);
+
+outplug->DefineSection(11, 2.57, 1.92, 2.08);
+outplug->DefineSection(12, 2.95, 1.92, 2.08);
 //
 shift1[0] = 0.0;
 shift1[1] = 2.09;
@@ -1728,7 +1815,6 @@ TGeoVolume *outplleftv = new TGeoVolume("TPC_OPLL", outplleft, m6);
 //
 //  support + holder + plug
 //
-
  
  TGeoVolumeAssembly *tpcohpl = new TGeoVolumeAssembly("TPC_OHPL"); 
  //
@@ -2324,7 +2410,7 @@ void AliTPCv2::StepManager()
   Int_t   pdg    = mc->TrackPid();
   
   if(TMath::Abs(charge)<=0. && pdg!=kPdgMonopole) return; // take only charged particles (except magnetic monopoles)
-  
+ 	
   // check the sensitive volume
 
   id = mc->CurrentVolID(copy); // vol ID and copy number (starts from 1!)
@@ -2427,32 +2513,8 @@ void AliTPCv2::StepManager()
     // Calculate number of ionization electrons nel
     Int_t nel=0;
 
-    // Stepsize in cm
-    Double_t stepSize = mc->TrackStep();
-    // printf("Stepsize %f\n", stepSize);
-    // if(stepSize > 0.25)
-    //   printf("Stepsize %f\n", stepSize);
-    TLorentzVector mom;
-    mc->TrackMomentum(mom);
-    Float_t ptot = mom.P();
-    // beta*gamma = p/E * E/m = p/m
-    Float_t betaGamma = ptot/mc->TrackMass();
-    betaGamma = TMath::Max(betaGamma,(Float_t)7.e-3); // protection against too small bg
-    TVectorD *bbpar = fTPCParam->GetBetheBlochParametersMC(); //get parametrization from OCDB
-    // Mean free path in cm
-    const Float_t prim = fTPCParam->GetNprim();
-    // Note that the charge**2 is to be able to handle e.g. light nuclei
-    const Double_t mfp = 1.0 / (charge*charge*prim*AliExternalTrackParam::BetheBlochAleph(betaGamma,(*bbpar)(0),(*bbpar)(1),(*bbpar)(2),(*bbpar)(3),(*bbpar)(4)));
-
-    const Double_t meanNcoll = stepSize/mfp;
-    const Double_t nColl = mc->GetRandom()->Poisson(meanNcoll);
-    // Variables needed to generate random powerlaw distributed energy loss
-    const Double_t alpha = -1 * fTPCParam->GetExp(); // NA49/G3 value
-    const Double_t alpha_p1 = alpha+1;
+    // parameters needed for magnetic monopoles as well
     const Double_t Emin = fTPCParam->GetFpot();
-    const Double_t Emax = fTPCParam->GetEend();
-    const Double_t Kmin = TMath::Power(Emin, alpha_p1);
-    const Double_t Kmax = TMath::Power(Emax, alpha_p1);
     const Double_t wIon = fTPCParam->GetWmean();
 
     // special treatmeant of magnetic monopoles
@@ -2460,6 +2522,33 @@ void AliTPCv2::StepManager()
       nel = (Int_t)((mc->Edep()-Emin)/wIon) + 1;
     }
     else{
+
+      // Stepsize in cm
+      Double_t stepSize = mc->TrackStep();
+      // printf("Stepsize %f\n", stepSize);
+      // if(stepSize > 0.25)
+      //   printf("Stepsize %f\n", stepSize);
+      TLorentzVector mom;
+      mc->TrackMomentum(mom);
+      Float_t ptot = mom.P();
+      // beta*gamma = p/E * E/m = p/m
+      Float_t betaGamma = ptot/mc->TrackMass();
+      betaGamma = TMath::Max(betaGamma,(Float_t)7.e-3); // protection against too small bg
+      TVectorD *bbpar = fTPCParam->GetBetheBlochParametersMC(); //get parametrization from OCDB
+      // Mean free path in cm
+      const Float_t prim = fTPCParam->GetNprim();
+      // Note that the charge**2 is to be able to handle e.g. light nuclei
+      const Double_t mfp = 1.0 / (charge*charge*prim*AliExternalTrackParam::BetheBlochAleph(betaGamma,(*bbpar)(0),(*bbpar)(1),(*bbpar)(2),(*bbpar)(3),(*bbpar)(4)));
+
+      const Double_t meanNcoll = stepSize/mfp;
+      const Double_t nColl = mc->GetRandom()->Poisson(meanNcoll);
+      // Variables needed to generate random powerlaw distributed energy loss
+      const Double_t alpha = -1 * fTPCParam->GetExp(); // NA49/G3 value
+      const Double_t alpha_p1 = alpha+1;
+      const Double_t Emax = fTPCParam->GetEend();
+      const Double_t Kmin = TMath::Power(Emin, alpha_p1);
+      const Double_t Kmax = TMath::Power(Emax, alpha_p1);
+      
       for(Int_t n = 0; n < nColl; n++) {
 	// Use GEANT3 / NA49 expression:
 	// P(Edep) ~ k * Edep^alpha

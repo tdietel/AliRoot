@@ -19,7 +19,6 @@
 
 #include "AliZMQhelpers.h"
 
-#include "zmq.h"
 #include <cstring>
 #include <cassert>
 #include <unistd.h>
@@ -42,14 +41,16 @@ void* AliZMQhelpers::gZMQcontext = NULL;
 const UInt_t AliZMQhelpers::BaseDataTopic::fgkMagicNumber = CharArr2uint32("O2O2");
 const ULong64_t AliZMQhelpers::DataTopic::fgkDataTopicDescription = CharArr2uint64("DataHDR");
 const UInt_t AliZMQhelpers::DataTopic::fgkTopicSerialization = CharArr2uint64("NONE");
+const ULong64_t AliZMQhelpers::kSerializationHLTROOT = CharArr2uint64("HLTROOT");
 const ULong64_t AliZMQhelpers::kSerializationROOT = CharArr2uint64("ROOT   ");
 const ULong64_t AliZMQhelpers::kSerializationNONE = CharArr2uint64("NONE   ");
 
-const AliZMQhelpers::DataTopic AliZMQhelpers::kDataTypeStreamerInfos("ROOTSTRI","***\n",0);
-const AliZMQhelpers::DataTopic AliZMQhelpers::kDataTypeInfo("INFO____","***\n",0);
-const AliZMQhelpers::DataTopic AliZMQhelpers::kDataTypeConfig("CONFIG__","***\n",0);
-const AliZMQhelpers::DataTopic AliZMQhelpers::kDataTypeTObject("ROOTTOBJ","***\n",0);
-const AliZMQhelpers::DataTopic AliZMQhelpers::kDataTypeTH1("ROOTHIST","***\n",0);
+const AliZMQhelpers::DataTopic AliZMQhelpers::kDataTypeStreamerInfos("ROOTSTRI","***\n",0,AliZMQhelpers::kSerializationROOT);
+const AliZMQhelpers::DataTopic AliZMQhelpers::kDataTypeInfo("INFO____","***\n",0,AliZMQhelpers::kSerializationNONE);
+const AliZMQhelpers::DataTopic AliZMQhelpers::kDataTypeConfig("CONFIG__","***\n",0,AliZMQhelpers::kSerializationNONE);
+const AliZMQhelpers::DataTopic AliZMQhelpers::kDataTypeTObject("ROOTTOBJ","***\n",0,AliZMQhelpers::kSerializationROOT);
+const AliZMQhelpers::DataTopic AliZMQhelpers::kDataTypeTH1("ROOTHIST","***\n",0,AliZMQhelpers::kSerializationROOT);
+const AliZMQhelpers::DataTopic AliZMQhelpers::kDataTypeAOD("AODDATA","***\n",0,AliZMQhelpers::kSerializationNONE);
 
 //_______________________________________________________________________________________
 void* AliZMQhelpers::alizmq_context()
@@ -215,7 +216,7 @@ int AliZMQhelpers::alizmq_socket_close(void*& socket, int linger)
 }
 
 //_______________________________________________________________________________________
-int AliZMQhelpers::alizmq_socket_init(void*& socket, void* context, std::string config, int timeout, int highWaterMark)
+int AliZMQhelpers::alizmq_socket_init(void*& socket, void* context, std::string config, int timeout, int highWaterMark, int lingerValue)
 {
   int rc = 0;
   int zmqSocketMode = 0;
@@ -249,8 +250,8 @@ int AliZMQhelpers::alizmq_socket_init(void*& socket, void* context, std::string 
   if (socket)
   {
     newSocket=false;
-    int lingerValue = 10;
-    rc = zmq_setsockopt(socket, ZMQ_LINGER, &lingerValue, sizeof(lingerValue));
+    int tmplingerValue = 10;
+    rc = zmq_setsockopt(socket, ZMQ_LINGER, &tmplingerValue, sizeof(tmplingerValue));
     if (rc!=0)
     {
       //printf("cannot set linger 0 on socket before closing\n");
@@ -298,7 +299,6 @@ int AliZMQhelpers::alizmq_socket_init(void*& socket, void* context, std::string 
     return -5;
   }
 
-  int lingerValue = 0;
   rc += zmq_setsockopt(socket, ZMQ_LINGER, &lingerValue, sizeof(lingerValue));
   //printf("socket mode: %s, endpoints: %s\n",alizmq_socket_name(zmqSocketMode), zmqEndpoints.c_str());
 
@@ -314,6 +314,7 @@ int AliZMQhelpers::alizmq_msg_add(aliZMQmsg* message, const std::string& topicSt
 
   DataTopic topic;
   topic.SetID(topicString.c_str());
+  topic.SetPayloadSize(data.size());
 
   //prepare topic msg
   zmq_msg_t* topicMsg = new zmq_msg_t;
@@ -370,6 +371,8 @@ int AliZMQhelpers::alizmq_msg_add(aliZMQmsg* message, const DataTopic* topic, vo
   }
   memcpy(zmq_msg_data(dataMsg),data,size);
 
+  static_cast<DataTopic*>(zmq_msg_data(topicMsg))->SetPayloadSize(size);
+
   //add the frame to the message
   message->push_back(std::make_pair(topicMsg,dataMsg));
   return message->size();
@@ -403,6 +406,8 @@ int AliZMQhelpers::alizmq_msg_add(aliZMQmsg* message, const DataTopic* topic, co
   }
   memcpy(zmq_msg_data(dataMsg),data.data(),data.size());
 
+  static_cast<DataTopic*>(zmq_msg_data(topicMsg))->SetPayloadSize(data.size());
+
   //add the frame to the message
   message->push_back(std::make_pair(topicMsg,dataMsg));
   return message->size();
@@ -435,6 +440,8 @@ int AliZMQhelpers::alizmq_msg_add(aliZMQmsg* message, DataTopic* topic, TObject*
     delete topicMsg;
     return -1;
   }
+
+  topic->SetPayloadSize(tmessage->Length());
 
   if (streamers) {
     alizmq_update_streamerlist(streamers, tmessage->GetStreamerInfos());
@@ -539,9 +546,15 @@ int AliZMQhelpers::alizmq_msg_prepend_streamer_infos(aliZMQmsg* message, aliZMQr
     listOfInfos.Add(*i);
   }
   ZMQTMessage* tmessage = ZMQTMessage::Stream(&listOfInfos, 1); //compress
+  if (!tmessage) {
+    zmq_close(topicMsg);
+    delete topicMsg;
+    return -1;
+  }
   zmq_msg_t* dataMsg = new zmq_msg_t;
   rc = zmq_msg_init_data( dataMsg, tmessage->Buffer(), tmessage->Length(),
        alizmq_deleteTObject, tmessage);
+  topic.SetPayloadSize(tmessage->Length());
   if (rc<0) {
     zmq_msg_close(topicMsg);
     zmq_msg_close(dataMsg);
@@ -628,7 +641,6 @@ int AliZMQhelpers::alizmq_msg_iter_init_streamer_infos(aliZMQmsg::iterator it)
               pSchema->BuildOld();
               pInfos->AddAtAndExpand(pSchema, version);
               pSchemas->Remove(pSchema);
-              printf("adding %s %i\n",pSchema->GetName(),version);
               //AliDebug(0,Form("adding schema definition %d version %d to class %s", i, version, pSchema->GetName()));
             } else {
               if (pInfo && pInfo->GetClassVersion()==version) {
@@ -671,6 +683,7 @@ int AliZMQhelpers::alizmq_msg_send(DataTopic& topic, TObject* object, void* sock
 
   //we are definitely serializing ROOT objects here...
   topic.SetSerialization(kSerializationROOT);
+  topic.SetPayloadSize(tmessage->Length());
 
   //then send the object topic
   rc = zmq_send( socket, &topic, sizeof(topic), ZMQ_SNDMORE );
@@ -739,7 +752,6 @@ void AliZMQhelpers::alizmq_deleteTopic(void*, void* object)
   DataTopic* topic = static_cast<DataTopic*>(object);
   delete topic;
 }
-
 
 //_______________________________________________________________________________________
 int AliZMQhelpers::alizmq_msg_close(aliZMQmsg* message)
@@ -827,12 +839,25 @@ int AliZMQhelpers::alizmq_msg_iter_topic(aliZMQmsg::iterator it, DataTopic& topi
 //_______________________________________________________________________________________
 int AliZMQhelpers::alizmq_msg_iter_data(aliZMQmsg::iterator it, TObject*& object)
 {
+  zmq_msg_t* topicMessage = it->first;
+  DataTopic* topic = reinterpret_cast<DataTopic*>(zmq_msg_data(topicMessage));
   zmq_msg_t* message = it->second;
   size_t size = zmq_msg_size(message);
   void* data = zmq_msg_data(message);
+  object=NULL;
 
-  object = ZMQTMessage::Extract(data, size);
-  return 0;
+  if (topic->fDataSerialization==kSerializationROOT) //serialized by the ZMQ framework or ROOT
+  {
+    object = ZMQTMessage::Extract(data, size);
+  } else {
+    return -1; //return -1 if payload not expected to be ROOT serialized data
+  }
+
+  if (object) {
+    return 0;  //all OK
+  } else {
+    return 1;  //something went wrong in the deserialization, maybe missing streamers
+  }
 }
 
 //_______________________________________________________________________________________
@@ -1071,10 +1096,10 @@ AliZMQhelpers::BaseDataTopic::BaseDataTopic()
 }
 
 //______________________________________________________________________________
-AliZMQhelpers::BaseDataTopic::BaseDataTopic(UInt_t size, ULong64_t desc, ULong64_t seri)
+AliZMQhelpers::BaseDataTopic::BaseDataTopic(UInt_t size, ULong64_t desc, ULong64_t seri, bool more)
   : fMagicNumber(fgkMagicNumber)
   , fHeaderSize(size)
-  , fFlags(0)
+  , fFlags(more?1:0)
   , fBaseHeaderVersion(1)
   , fHeaderDescription(desc)
   , fHeaderSerialization(seri)

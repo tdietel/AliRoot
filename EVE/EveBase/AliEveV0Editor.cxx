@@ -19,6 +19,7 @@
 #include "TGNumberEntry.h"
 #include "TGColorSelect.h"
 #include "TGDoubleSlider.h"
+#include "TEveGeoShape.h"
 
 
 //______________________________________________________________________________

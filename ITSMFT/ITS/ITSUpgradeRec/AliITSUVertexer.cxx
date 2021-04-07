@@ -36,7 +36,7 @@ AliITSUVertexer::AliITSUVertexer(Double_t phicut, Double_t zcut, Double_t paircu
 														  fClusterPhi(),
 														  fClusters(),
 														  fLines("AliStrLine",1000),
-														  fLinesClusters("AliITSUClusterLines.h",1000),
+														  fLinesClusters("AliITSUClusterLines",1000),
 														  fLinesPhi(0),
 														  fNoClusters(0),
 														  fNoLines(0),

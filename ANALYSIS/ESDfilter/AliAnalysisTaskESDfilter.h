@@ -78,10 +78,19 @@ class AliAnalysisTaskESDfilter : public AliAnalysisTaskSE
   void EnableV0CascadeVerticesReco() {fIsV0CascadeRecoEnabled = kTRUE;}
   void SetPropagateTrackToEMCal(Bool_t propagate) {fDoPropagateTrackToEMCal = propagate;}
   void SetEMCalSurfaceDistance(Double_t d)        {fEMCalSurfaceDistance = d;}
+  void SetUseMassForPropToEmcal(Bool_t b)         {fUseMassForPropToEMCal = b;}
+  void SetUseOuterParamForPropToEmcal(Bool_t b)   {fUseOuterParamForPropToEMCal = b;}
   void SetRefitVertexTracks(Int_t algo=6, Double_t* cuts=0);
-  
+  void SetRunMVertexerForPileUp(int par=0) { fRunMVertexerForPileUp = par; }
+  int  GetRunMVertexerForPileUp() const { return fRunMVertexerForPileUp; }
+
   void SetMuonCaloPass();
   void SetAddPCMv0s(Bool_t addPCMv0s) {fAddPCMv0s=addPCMv0s;}
+  void SetSelectiveResetV0(Bool_t lOpt=kTRUE) {fkDoSelectiveV0Reset=lOpt;}
+  
+  //helper
+  Float_t GetCosPA(AliESDtrack *lPosTrack, AliESDtrack *lNegTrack, Float_t lB, Float_t *lVtx);
+  void SelectiveResetV0s(AliESDEvent *event, Int_t lType = 0);
 
   AliAnalysisFilter* GetTrackFilter() const { return fTrackFilter;}
 
@@ -116,6 +125,7 @@ private:
 
   TClonesArray& Tracks();
   TClonesArray& V0s();
+  TClonesArray& Kinks();
   TClonesArray& Vertices();
   TClonesArray& Cascades();
   
@@ -174,18 +184,21 @@ private:
   Double_t           fCascadeCuts[8];              ///< Array to store the values for the different reco selections cascades related
   Bool_t             fDoPropagateTrackToEMCal;     ///< whether or not to propagate the tracks to the EMCal surface -- true by default
   Double_t           fEMCalSurfaceDistance;        ///< EMCal surface distance from the center of the detector (r = 440 by default)
+  Bool_t             fUseMassForPropToEMCal;       ///< Use reconstructed mass instead of pion in the track propagation (off by default, ie pion mass is used) 
+  Bool_t             fUseOuterParamForPropToEMCal; ///< Use the outer param for starting point of extrapolation (off by default)
   Int_t              fRefitVertexTracks;           ///< request to refit the vertex if >=0 (algoID if cuts not supplied, otherwise ncuts)
   Int_t              fRefitVertexTracksNCuts;      ///< number of cut parameters
-  /// optional cuts for vertex refit
-  Double_t*          fRefitVertexTracksCuts;       //[fRefitVertexTracksNCuts]
-  Bool_t fIsMuonCaloPass; ///< whether or not this filtering is used on a muon_calo ESD
+  Double_t*          fRefitVertexTracksCuts;       //[fRefitVertexTracksNCuts] optional cuts for vertex refit
+  Int_t              fRunMVertexerForPileUp;       ///< if >=0, run MVertexerTracks allowing only pile-up with mult >= fRunMVertexerForPileUp
+  Bool_t             fIsMuonCaloPass;              ///< whether or not this filtering is used on a muon_calo ESD
   Bool_t	     fAddPCMv0s;		   ///< Add pcm v0s when v0filter is switched on
   TBits* 	     fbitfieldPCMv0sA;		   ///< Bitfield with PCM v0s from on-fly v0 finder
   TBits* 	     fbitfieldPCMv0sB;		   ///< Bitfield with PCM v0s from offline v0 finder
   TH1D*		     fv0Histos; 		   ///< v0 histos for PCM consistency checks
   TList*	     fHistov0List;		  ///< TList containing PCM histos
+  Bool_t         fkDoSelectiveV0Reset; ///< if true + redo V0+cascade true, keep OTF V0s
   
-  ClassDef(AliAnalysisTaskESDfilter, 21); // Analysis task for standard ESD filtering
+  ClassDef(AliAnalysisTaskESDfilter, 23); // Analysis task for standard ESD filtering
 };
 
 #endif

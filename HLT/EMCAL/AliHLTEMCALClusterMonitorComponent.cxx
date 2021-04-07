@@ -18,7 +18,7 @@
 
 #include "TFile.h"
 #include "TString.h"
-
+#include "AliESDVZERO.h"
 
 
 /** 
@@ -102,6 +102,7 @@ AliHLTEMCALClusterMonitorComponent::GetInputDataTypes(vector<AliHLTComponentData
 	//see header file for documentation
 	list.clear();
 	list.push_back(kAliHLTDataTypeCaloCluster);
+	list.push_back(kAliHLTDataTypeESDContent | kAliHLTDataOriginVZERO);
 }
 
 AliHLTComponentDataType 
@@ -126,31 +127,32 @@ AliHLTEMCALClusterMonitorComponent::DoEvent(const AliHLTComponentEventData& evtD
 		std::vector<AliHLTComponentBlockData>& /*outputBlocks*/)
 {
 
-
 	const AliHLTComponentBlockData* iter = 0;
 	unsigned long ndx;
 
 	UInt_t specification = 0;
 	for( ndx = 0; ndx < evtData.fBlockCnt; ndx++ )
 	{
-	  
-	  	AliHLTCaloClusterHeaderStruct *caloClusterHeaderPtr = 0;
+	
+		AliHLTCaloClusterDataStruct* caloClusterPtr = 0;
 
 		iter = blocks+ndx;
 		
 		if (fBeVerbose) PrintComponentDataTypeInfo(iter->fDataType);
 
-		if (iter->fDataType == kAliHLTDataTypeCaloCluster) caloClusterHeaderPtr = reinterpret_cast<AliHLTCaloClusterHeaderStruct*>(iter->fPtr);
+		if (iter->fDataType == kAliHLTDataTypeCaloCluster) caloClusterPtr = reinterpret_cast<AliHLTCaloClusterDataStruct*>(iter->fPtr);
 		else {
 			if(fBeVerbose) HLTWarning("\nI-CLUSTERMONITORCOMPONENT: Data block does not contain cluster type \n");
 		}
 
-	
+		Int_t nClusters = iter->fSize/sizeof(AliHLTCaloClusterDataStruct);
+		const AliESDVZERO* esdVZERO = dynamic_cast<const AliESDVZERO*>(GetFirstInputObject(kAliHLTDataTypeESDContent | kAliHLTDataOriginVZERO, "AliESDVZERO"));
+
 		specification |= iter->fSpecification;
-		fHistoMakerPtr->MakeHisto(caloClusterHeaderPtr);
+
+		fHistoMakerPtr->MakeHisto(caloClusterPtr, nClusters, esdVZERO);
 
 	}
-
 
 	fLocalEventCount++;
 
@@ -162,12 +164,29 @@ AliHLTEMCALClusterMonitorComponent::DoEvent(const AliHLTComponentEventData& evtD
 	  
 	  if (fBeVerbose) cout << "\nI-CLUSTERMONITORCOMPONENT: pushback done at " << fLocalEventCount << " events " << endl;
 	  
-	  PushBack(fHistoMakerPtr->GetHistograms(), kAliHLTDataTypeTObjArray | kAliHLTDataOriginEMCAL , specification);
+	  PushHistograms(fHistoMakerPtr->GetHistograms());
 	}
 	
 	return 0;
 }
 
+void AliHLTEMCALClusterMonitorComponent::PushHistograms(TCollection* list)
+{
+  HLTDebug("Collection has %d histograms", list->GetEntries());
+  TIter next(list);
+
+  TH1* histo = 0;
+  while ((histo = static_cast<TH1*>(next()))) {
+    if (histo->GetEntries() > 0) {
+      HLTDebug("Pushing histogram %s", histo->GetName());
+      Int_t nbytes = PushBack(histo, kAliHLTDataTypeHistogram | kAliHLTDataOriginEMCAL, 0);
+      if (nbytes > 0)
+        histo->Reset();
+    } else {
+      HLTDebug("Not pushing histogram %s, because it has 0 entries", histo->GetName());
+    }
+  }
+}
 
 AliHLTComponent*
 AliHLTEMCALClusterMonitorComponent::Spawn()

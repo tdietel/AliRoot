@@ -165,9 +165,11 @@ void AliStack::PushTrack(Int_t done, Int_t parent, Int_t pdg, const Float_t *pmo
   //
     TParticlePDG* pmc =  TDatabasePDG::Instance()->GetParticle(pdg);
     if (pmc) {
-	Float_t mass = TDatabasePDG::Instance()->GetParticle(pdg)->Mass();
-	Float_t e=TMath::Sqrt(mass*mass+pmom[0]*pmom[0]+
-			      pmom[1]*pmom[1]+pmom[2]*pmom[2]);
+	Double_t mass = TDatabasePDG::Instance()->GetParticle(pdg)->Mass();
+	Double_t px = pmom[0];
+	Double_t py = pmom[1];
+	Double_t pz = pmom[2];
+	Double_t e = TMath::Sqrt(mass * mass + px * px + py * py + pz * pz);
 	
 //    printf("Loading  mass %f ene %f No %d ip %d parent %d done %d pos %f %f %f mom %f %f %f kS %d m \n",
 //	   mass,e,fNtrack,pdg,parent,done,vpos[0],vpos[1],vpos[2],pmom[0],pmom[1],pmom[2],kS);
@@ -179,6 +181,7 @@ void AliStack::PushTrack(Int_t done, Int_t parent, Int_t pdg, const Float_t *pmo
     } else {
 	AliWarning(Form("Particle type %d not defined in PDG Database !", pdg));
 	AliWarning("Particle skipped !");
+	ntr = -1;
     }
 }
 
@@ -1075,6 +1078,14 @@ Bool_t AliStack::IsPhysicalPrimary(Int_t index, Bool_t useInEmbedding)
       if (ipm > -1) {
 	TParticle* ppm  = Particle(ipm, useInEmbedding);
 	if (TMath::Abs(ppm->GetPdgCode()) == 130) return kFALSE;
+      }
+      // <-
+      // check for direct photon in parton shower
+      // ->
+      Int_t ipd = p->GetFirstDaughter();
+      if (pdg == 22 && ipd > -1) {
+	TParticle* ppd  = Particle(ipd, useInEmbedding); 
+	if (ppd->GetPdgCode() == 22) return kFALSE;
       }
       // <-
 	return kTRUE;

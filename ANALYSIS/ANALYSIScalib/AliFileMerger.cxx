@@ -14,6 +14,7 @@
  **************************************************************************/
 
 #include <fstream>
+#include <TMap.h>
 #include <THashList.h>
 #include <TChain.h>
 #include <TKey.h>

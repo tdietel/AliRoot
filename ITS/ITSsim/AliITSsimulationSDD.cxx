@@ -415,7 +415,7 @@ void AliITSsimulationSDD::HitsToAnalogDigits( AliITSmodule *mod ) {
     Float_t xloc=xL[0];
     Float_t zloc=xL[2]+0.5*dxL[2];
     zAnode=seg->GetAnodeFromLocal(xloc,zloc); // anode number in the range 0.-511.
-    driftSpeed = res->GetDriftSpeedAtAnode(zAnode);
+    driftSpeed = TMath::Abs(res->GetDriftSpeedAtAnode(zAnode));
     driftSpeed+= fDetType->GetResponseSDD()->GetDeltaVDrift(fModule,zAnode>255);
 
     if(timeStep*fMaxNofSamples < sddLength/driftSpeed) {
@@ -435,7 +435,7 @@ void AliITSsimulationSDD::HitsToAnalogDigits( AliITSmodule *mod ) {
     AliITShit* h=(AliITShit*)hits->At(ii);
     if(h){ 
       tof=h->GetTOF()*1E9; 
-      AliDebug(1,Form("TOF for hit %d on mod %d (particle %d)=%g",ii,fModule,h->Track(),tof));
+      AliDebug(5,Form("TOF for hit %d on mod %d (particle %d)=%g",ii,fModule,h->Track(),tof));
     }
 
     Float_t corrx=0, corrz=0;
@@ -459,7 +459,15 @@ void AliITSsimulationSDD::HitsToAnalogDigits( AliITSmodule *mod ) {
     
     // Compute number of segments to brake step path into
     drTime = drPath/driftSpeed;  //   Drift Time
-    sigA   = TMath::Sqrt(2.*dfCoeff*drTime+s1*s1);// Sigma along the anodes
+    Double_t sig2A=2.*dfCoeff*drTime+s1*s1; // square of sigma along the anodes
+    if(sig2A < 0 || sig2A > 1E6){
+      // protection for negative or too large values of sig2A causing FPE with fluka when computing sqrt
+      // The maximum value of sig2A should be of about 50000, a safety margin is applied cutting at 1e6
+      AliInfo(Form("Anomalous sigma^2 (%e) at anodes: drPath=%e driftSpeed=%e drTime=%e dfCoeff=%e s1=%e",
+		   sig2A,drPath,driftSpeed,drTime,dfCoeff,s1));
+      continue;
+    }
+    sigA   = TMath::Sqrt(sig2A);// Sigma along the anodes
     // calcuate the number of time the path length should be split into.
     nOfSplits = (Int_t) (1. + 10000.*pathInSDD/sigA);
     if(fFlag) nOfSplits = 1;
@@ -478,7 +486,7 @@ void AliITSsimulationSDD::HitsToAnalogDigits( AliITSmodule *mod ) {
       //      if(avDrft*xloc<0) AliDebug(1,Form("Swap of side xloc_orig=%f  xloc_now=%f",xloc,avDrft));
       iWing = seg->GetSideFromLocalX(avDrft);
     
-      driftSpeed = res->GetDriftSpeedAtAnode(zAnode);	
+      driftSpeed = TMath::Abs(res->GetDriftSpeedAtAnode(zAnode));
       driftSpeed+= fDetType->GetResponseSDD()->GetDeltaVDrift(fModule,zAnode>255);
       driftPath = TMath::Abs(10000.*avDrft);
       driftPath = sddLength-driftPath;
@@ -490,7 +498,15 @@ void AliITSsimulationSDD::HitsToAnalogDigits( AliITSmodule *mod ) {
       } // end if driftPath < 0
       drTime     = driftPath/driftSpeed; // drift time for segment.
       // Sigma along the anodes for track segment.
-      sigA       = TMath::Sqrt(2.*dfCoeff*drTime+s1*s1);
+      Double_t sigSqA=2.*dfCoeff*drTime+s1*s1; // square of sigma along the anodes
+      if(sigSqA < 0 || sigSqA > 1E6){
+	// protection for negative or too large values of sigSqA causing FPE with fluka when computing sqrt
+	// The maximum value of sigSqA should be of about 50000, a safety margin is applied cutting at 1e6
+	AliInfo(Form("Anomalous sigma^2 (%e) for track segment: drPath=%e driftSpeed=%e drTime=%e dfCoeff=%e s1=%e",
+		     sigSqA,drPath,driftSpeed,drTime,dfCoeff,s1));
+	continue;
+      }
+      sigA       = TMath::Sqrt(sigSqA);// Sigma along the anodes
       sigT       = sigA/driftSpeed;
 
       drTime+=tof; // take into account Time Of Flight from production point
@@ -500,7 +516,7 @@ void AliITSsimulationSDD::HitsToAnalogDigits( AliITSmodule *mod ) {
       if(zAnode>nofAnodes) zAnode-=nofAnodes;  // to have the anode number between 0. and 256.
       iAnode = (Int_t) (1.001+zAnode); // iAnode in range 1-256 !!!!
       
-	// Peak amplitude in nanoAmpere
+      // Peak amplitude in nanoAmpere
       amplitude  = fScaleSize*160.*depEnergy/
 	(timeStep*eVpairs*2.*acos(-1.));
       chargeloss = 1.-cHloss*driftPath/1000.;

@@ -55,6 +55,7 @@ class AliGRPRecoParam;
 #include "AliQAv1.h"
 #include "AliEventInfo.h"
 #include "AliRecoParam.h"
+#include "AliPID.h"
 
 using std::ofstream;
 
@@ -111,12 +112,14 @@ public:
     {fLoadAlignData = detectors;};
 
   void           SetRun1PIDforTracking(Bool_t val=kTRUE);
+  void           SetPIDforTrackingOptimisedForNuclei(Int_t val, AliPID::EParticleType type = AliPID::kHe3);
   void           SetTreeBuffSize(Long64_t sz=30000000) {fTreeBuffSize = sz;}
   //*** Global reconstruction flag setters
   void SetRunMultFinder(Bool_t flag=kTRUE) {fRunMultFinder=flag;};
   void SetRunVertexFinder(Bool_t flag=kTRUE) {fRunVertexFinder=flag;};
   void SetRunVertexFinderTracks(Bool_t flag=kTRUE) {fRunVertexFinderTracks=flag;};
   void SetRunV0Finder(Bool_t flag=kTRUE) {fRunV0Finder=flag;};
+  void SetRunCustomPileupFinders(Bool_t flag=kTRUE) {fRunCustomPileupFinders=flag;}
   void SetRunCascadeFinder(Bool_t flag=kTRUE) {fRunCascadeFinder=flag;};
   void SetStopOnError(Bool_t flag=kTRUE) {fStopOnError=flag;}
   void SetStopOnMissingTriggerFile(Bool_t flag=kTRUE) {fStopOnMissingTriggerFile=flag;}
@@ -146,6 +149,7 @@ public:
   
   //
   Bool_t  IsRunMultFinder()   const {return fRunMultFinder;}
+  Bool_t  IsRunCustomPileupFinders() const {return fRunCustomPileupFinders;}
   
   // CDB storage activation
   void SetDefaultStorage(const char* uri);
@@ -266,6 +270,7 @@ private:
   Bool_t         RunSPDTrackleting(AliESDEvent*& esd);
   Bool_t         RunMultFinder(AliESDEvent*& esd);
   Bool_t         RunTracking(AliESDEvent*& esd, AliESDpid &PID);
+  Bool_t         RunCustomPileUpFinders(AliESDEvent*& esd);
   Bool_t         CleanESD(AliESDEvent *esd,const AliGRPRecoParam *grpRecoParam);
   Bool_t         FillESD(AliESDEvent*& esd, const TString& detectors);
   Bool_t         FillTriggerESD(AliESDEvent*& esd);
@@ -313,6 +318,7 @@ private:
   Bool_t         fRunV0Finder;        // run the ESD V0 finder
   Bool_t         fRunCascadeFinder;   // run the ESD cascade finder
   Bool_t         fRunMultFinder;      // run the trackleter for ITS clusters
+  Bool_t         fRunCustomPileupFinders; // run custom pile-up finders
   Bool_t         fStopOnError;        // stop or continue on errors
   Bool_t         fStopOnMissingTriggerFile; // stop if the simulated trigger file is absent
   Bool_t         fWriteAlignmentData; // write track space-points flag
@@ -458,7 +464,7 @@ private:
   Int_t                fNAbandonedEv;   //  number of abandoned events
   static const char*   fgkStopEvFName;  //  filename for stop.event stamp
   //
-  ClassDef(AliReconstruction, 53)      // class for running the reconstruction
+  ClassDef(AliReconstruction, 54)      // class for running the reconstruction
 };
 
 #endif

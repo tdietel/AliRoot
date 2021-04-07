@@ -177,14 +177,13 @@ void AliNDLocalRegression::SetHistogram(THn* histo ){
   // Check histogram
   //
   Int_t ndim = histo->GetNdimensions();
-  Bool_t isOK=kTRUE;
   for (Int_t idim=0; idim<ndim; idim++){
     TAxis * axis = histo->GetAxis(idim);
     if (axis->GetNbins()<2) {
-      ::Error("AliNDLocalRegression::SetHistogram",TString::Format("Invalid binning nbins<2 %d",  axis->GetNbins()).Data());
+      ::Error("AliNDLocalRegression::SetHistogram","Invalid binning nbins<2 %d",  axis->GetNbins());
     }
     if (axis->GetXmin()>=axis->GetXmax()) {
-      ::Error("AliNDLocalRegression::SetHistogram",TString::Format("Invalid range <%f,%f", axis->GetXmin(),axis->GetXmax()).Data());
+      ::Error("AliNDLocalRegression::SetHistogram","Invalid range <%f,%f", axis->GetXmin(),axis->GetXmax());
     }    
   }
 
@@ -206,6 +205,7 @@ Bool_t    AliNDLocalRegression::CleanCovariance(){
   //
   if (fLocalFitCovar) delete fLocalFitCovar;
   fLocalFitCovar=0;
+  return true;
 };
 
 
@@ -283,11 +283,11 @@ Bool_t AliNDLocalRegression::MakeFit(TTree * tree , const char* formulaVal, cons
   //
   Int_t entriesVal = tree->Draw(formulaVal,selection,"goffpara",entries);
   if (entriesVal==0) {
-    ::Error("AliNDLocalRegression::MakeFit", TString::Format("Empty point list\t%s\t%s\n",formulaVal,selection).Data());
+    ::Error("AliNDLocalRegression::MakeFit", "Empty point list\t%s\t%s\n",formulaVal,selection);
     return kFALSE; 
   }
   if (tree->GetVal(0)==NULL || (tree->GetVal(1)==NULL)){
-    ::Error("AliNDLocalRegression::MakeFit", TString::Format("Wrong selection\t%s\t%s\n",formulaVar,selection).Data());
+    ::Error("AliNDLocalRegression::MakeFit", "Wrong selection\t%s\t%s\n",formulaVar,selection);
     return kFALSE; 
   }
   TVectorD values(entriesVal,tree->GetVal(0));
@@ -300,13 +300,13 @@ Bool_t AliNDLocalRegression::MakeFit(TTree * tree , const char* formulaVal, cons
   TObjArray pointArray(fNParameters);
   Int_t entriesVar = tree->Draw(formulaVar,selection,"goffpara",entries);
   if (entriesVal!=entriesVar) {
-    ::Error("AliNDLocalRegression::MakeFit", TString::Format("Wrong selection\t%s\t%s\n",formulaVar,selection).Data());
+    ::Error("AliNDLocalRegression::MakeFit", "Wrong selection\t%s\t%s\n",formulaVar,selection);
     return kFALSE; 
   }
   for (Int_t ipar=0; ipar<fNParameters; ipar++) pointArray.AddAt(new TVectorD(entriesVar,tree->GetVal(ipar)),ipar);
   // 2.c) kernel array 
   TObjArray kernelArrayI2(fNParameters);
-  Int_t entriesKernel = tree->Draw(formulaKernel,selection,"goffpara",entries);
+  tree->Draw(formulaKernel,selection,"goffpara",entries);
   for (Int_t ipar=0; ipar<fNParameters; ipar++) {
     TVectorD* vdI2 = new TVectorD(entriesVar,tree->GetVal(ipar));
     for (int k=entriesVar;k--;) { // to speed up, precalculate inverse squared
@@ -505,6 +505,7 @@ Bool_t  AliNDLocalRegression::MakeRobustStatistic(TVectorD &values,TVectorD &err
     (*fLocalRobustStat)(ibin,1)=meanX;
     (*fLocalRobustStat)(ibin,2)=rmsX;
   }
+  return true;
 }
 
 
@@ -662,7 +663,8 @@ Bool_t AliNDLocalRegression::EvalAndDerivative(Double_t *point, Double_t &val, D
 
 Int_t  AliNDLocalRegression::GetVisualCorrectionIndex(const char *corName){
   //
-  return TMath::Hash(corName)%1000000;
+  return TMath::Hash(corName)%1000000;  /// BUGGY hash in the TMath
+  //return TString(corName).Hash()%1000000; /// also buggy - even more clashes
 }
 
     
@@ -810,7 +812,7 @@ Bool_t AliNDLocalRegression::AddWeekConstrainsAtBoundaries(Int_t nDims, Int_t *i
 
     TFile *f = TFile::Open("constrainStream.root")
    */
-  const Double_t kScale=0.5;
+  //const Double_t kScale=0.5;
   const Double_t singularity_tolerance = 1e-200;
   if (fLocalFitCovar==NULL) {
     ::Error("AliNDLocalRegression::EvalError", "Covariance matrix not available");
@@ -819,8 +821,8 @@ Bool_t AliNDLocalRegression::AddWeekConstrainsAtBoundaries(Int_t nDims, Int_t *i
   //
   // 1.)  Make backup of original parameters
   //
-  const TObjArray *vecParamOrig    = fLocalFitParam;
-  const TObjArray *vecCovarOrig    = fLocalFitCovar;
+  //const TObjArray *vecParamOrig    = fLocalFitParam;
+  //const TObjArray *vecCovarOrig    = fLocalFitCovar;
   TObjArray *vecParamUpdated = new TObjArray(fHistPoints->GetNbins());
   TObjArray *vecCovarUpdated = new TObjArray(fHistPoints->GetNbins());
   // 
@@ -860,9 +862,9 @@ Bool_t AliNDLocalRegression::AddWeekConstrainsAtBoundaries(Int_t nDims, Int_t *i
   const THn* his = GetHistogram();
   Int_t binIndex[999]={0};
   Int_t binIndexSide[999]={0};
-  Int_t nbinsAxis[999]={0};
+  //Int_t nbinsAxis[999]={0};
   Double_t binCenter[999]={0};
-  Double_t binWidth[999]={0};
+  //Double_t binWidth[999]={0};
 
   if (relWeight!=NULL) for (Int_t iParam=0; iParam<nParams; iParam++){
     Int_t index=0;
@@ -876,7 +878,7 @@ Bool_t AliNDLocalRegression::AddWeekConstrainsAtBoundaries(Int_t nDims, Int_t *i
   }
 
 
-  for (Int_t iDim=0; iDim<nDims; iDim++){nbinsAxis[iDim]=his->GetAxis(iDim)->GetNbins();}  
+  //for (Int_t iDim=0; iDim<nDims; iDim++){nbinsAxis[iDim]=his->GetAxis(iDim)->GetNbins();}  //commented, because nbinsAxis was not used
   //  Int_t nBins=fHistPoints->GetNbins();
   Int_t nBins=fLocalFitParam->GetSize();
   for (Int_t iBin=0; iBin<nBins; iBin++){   // loop over bins
@@ -885,7 +887,7 @@ Bool_t AliNDLocalRegression::AddWeekConstrainsAtBoundaries(Int_t nDims, Int_t *i
     his->GetBinContent(iBin,binIndex);
     for (Int_t iDim=0; iDim<nDims; iDim++) { // fill common info for bin of interest
       binCenter[iDim]= his->GetAxis(iDim)->GetBinCenter(binIndex[iDim]);
-      binWidth[iDim] = his->GetAxis(iDim)->GetBinWidth(binIndex[iDim]);
+      //binWidth[iDim] = his->GetAxis(iDim)->GetBinWidth(binIndex[iDim]); //should this be fBinWidth, binWidth is not used
     }
     if (fLocalFitParam->UncheckedAt(iBin)==NULL) continue;
     Double_t *vecParam0 = ((TVectorD*)(fLocalFitParam->UncheckedAt(iBin)))->GetMatrixArray();
@@ -1018,7 +1020,7 @@ Bool_t AliNDLocalRegression::AddWeekConstrainsAtBoundaries(Int_t nDims, Int_t *i
     if (TMath::Abs(determinant)<singularity_tolerance ) {
       vecParamUpdated->AddAt(new TVectorD(*((TVectorD*)(fLocalFitParam->UncheckedAt(iBin)))),iBin); 
       vecCovarUpdated->AddAt(new TMatrixD(*((TMatrixD*)(fLocalFitCovar->UncheckedAt(iBin)))),iBin);
-      Info("AliNDLocalRegression::AddWeekConstrainsAtBoundaries", TString::Format("Update matrix not possible matSk.Determinant() too small, skipping bin %d",iBin).Data());
+      Info("AliNDLocalRegression::AddWeekConstrainsAtBoundaries", "Update matrix not possible matSk.Determinant() too small, skipping bin %d",iBin);
     }else{
       matSk.Invert();
       matKk = (covXk*matHkT)*matSk;              //  Optimal Kalman gain
@@ -1073,13 +1075,14 @@ void AliNDLocalRegression::DumpToTree(Int_t nDiv,  TTreeStream & stream){
   //
   //
   //
-  const Int_t kMaxDim=100;
+  //const Int_t kMaxDim=100;
   Int_t nBins=fHistPoints->GetNbins();
   
   TVectorD binLowEdge(fNParameters);
   TVectorD binLocal(fNParameters);
   TVectorF binIndexF(fNParameters);
   Double_t *pbinLowEdge= binLowEdge.GetMatrixArray();
+  (void) pbinLowEdge;
   //
   for (Int_t iBin=0; iBin<nBins; iBin++){   // loop over bins
     if (iBin%fgVerboseLevel==0) printf("%d\n",iBin);
@@ -1163,4 +1166,55 @@ Double_t AliNDLocalRegression::EvalGraphKernel(TGraph * gr, Double_t evalTime, D
   return (evalLog==0) ? fitter.GetParameter(0) : TMath::Exp(fitter.GetParameter(0));
 }
 
+/// Create ND kernel regression - short cut to typical use case
+///  kernel width has to be sufficiently broad to define fit
+///  point added  to fit only in case kernel>kernelThreshold
+///    FITS CAN FAIL in case of mismatch between mesh, kernel and kernelThreshold
+///    TODO - Write more guideline in case of fit failure
+/// \param tree                 - input tree
+/// \param regressionName       - name of the regression to create (and alias to append)
+/// \param mesh                 - layout of the lookup table
+/// \param var                  - variable to fit varString:errorString
+/// \param varExp               - expression list septated by :
+/// \param selection            - tree selection
+/// \param kernels              - kernel shape
+/// \param kernelThreshold      - kernel threshold
+/// \return
+AliNDLocalRegression * AliNDLocalRegression::MakeRegression(TTree* tree, TString regressionName, TString mesh, TString var, TString varExp, TString selection,  TString kernels, Float_t kernelThreshold){
+   TObjArray * varExpArray=varExp.Tokenize(":");
+  mesh.ReplaceAll("(",""); mesh.ReplaceAll(")","");
+  TObjArray * rangeArray=mesh.Tokenize(",");
+  Int_t nVars=varExpArray->GetEntries();
+  if (nVars*3!=rangeArray->GetEntries()){
+    ::Error("makeRegression","Non compatible ranges");
+    delete rangeArray;
+    delete varExpArray;
+    return 0;
+  }
+  TArrayI bins(nVars);
+  TArrayD hmin(nVars),hmax(nVars);
+  for (Int_t i=0; i<nVars; i++){
+    bins[i]=TString(rangeArray->At(i*3+0)->GetName()).Atoi();
+    hmin[i]=TString(rangeArray->At(i*3+1)->GetName()).Atof();
+    hmax[i]=TString(rangeArray->At(i*3+2)->GetName()).Atof();
+  }
+  THnF *his = new THnF(regressionName, regressionName, nVars,bins.fArray,hmin.fArray,hmax.fArray);
+  AliNDLocalRegression *regression= new AliNDLocalRegression;
+  regression->SetHistogram(his);
+  regression->SetName(regressionName);
+  regression->MakeFit(tree,var.Data(), varExp.Data(),selection.Data(),kernels.Data(),"",kernelThreshold);
+  Int_t hashIndex=regression->GetVisualCorrectionIndex(regressionName.Data());
+  AliNDLocalRegression::AddVisualCorrection(regression, hashIndex);
+  varExp.ReplaceAll(":",",");
+  tree->SetAlias(regressionName,TString::Format("AliNDLocalRegression::GetCorrND(%d,%s+0)",hashIndex, varExp.Data()).Data());
+  return regression;
+}
 
+Bool_t AliNDLocalRegression::RemoveQAInformation(){
+  //
+  delete fLocalFitQuality;
+  fLocalFitQuality=0;
+  delete fLocalFitCovar;
+  fLocalFitCovar=0;
+  return 0;
+}
