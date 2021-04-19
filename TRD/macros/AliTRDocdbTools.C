@@ -7,7 +7,7 @@
 #include <AliTRDCalDCSFEEv2.h>
 
 #include <TH1.h>
-#include <TAlien.h>
+// #include <TAlien.h>
 #include <TGridResult.h>
 
 #include <iostream>
@@ -33,11 +33,16 @@ void AliTRDocdbTools()
        << endl
        << "This is a collection of utilities to interact with the "
        << "TRD part of the OCDB." << endl
+       << endl
+       << "Usage examples: " << endl
+       << "  UseCvmfsCDB(2018) " << endl
+       << "  check_run(285010) " << endl
+       << "  fix_mixed_config(285010,\"ALIROOT-8660\")" << endl
        << endl;
 
-  
-  //UseCvmfsCDB(2018);
-  UseAlienCDB(288908);
+
+  UseCvmfsCDB(2018);
+  // UseAlienCDB(288908);
 }
 
 void UseAlienCDB(Int_t runNr)
@@ -66,7 +71,7 @@ void UseLocalCDB(TString path)
 
 void list_runs(Int_t year)
 {
-  const char* dirpattern = 
+  const char* dirpattern =
     Form("/cvmfs/alice-ocdb.cern.ch/calibration/data/%d/OCDB/TRD/Calib/DCS",
 	 year);
 
@@ -76,14 +81,14 @@ void list_runs(Int_t year)
   while((entry = (char*)gSystem->GetDirEntry(dir))) {
     int firstrun=0, lastrun=0,v=0,s=0;
     sscanf(entry,"Run%d_%d_v%d_s%d.root",&firstrun,&lastrun,&v,&s);
-    
+
     if (firstrun==0) continue;
-    
+
     if ( lastrun != 999999999 ) {
       // this entry looks like a fix for a broken config -> skip
       continue;
     }
-    
+
     runinfo(firstrun);
   }
 
@@ -93,13 +98,13 @@ void list_runs_alien(Int_t year, int minrun=0, int maxrun=999999999)
 {
   AliLog::SetGlobalLogLevel(AliLog::kWarning);
   TGridResult* res=gGrid->Ls(Form("/alice/data/%d/OCDB/TRD/Calib/DCS", year));
-  
+
   for (int i=0; i<res->GetEntries(); i++) {
-    
+
     int firstrun=0, lastrun=0,v=0,s=0;
     sscanf(res->GetFileName(i), "Run%d_%d_v%d_s%d.root",
 	   &firstrun, &lastrun, &v, &s);
-    
+
     // skip default entry, not associated with a run
     if (firstrun==0) continue;
 
@@ -109,7 +114,7 @@ void list_runs_alien(Int_t year, int minrun=0, int maxrun=999999999)
     // skip runs outside requested range
     if (firstrun < minrun) continue;
     if (firstrun > maxrun) continue;
-    
+
     runinfo(firstrun);
   }
 
@@ -121,13 +126,13 @@ void check_runs_alien(Int_t year, int minrun=0, int maxrun=999999999)
 {
   AliLog::SetGlobalLogLevel(AliLog::kWarning);
   TGridResult* res=gGrid->Ls(Form("/alice/data/%d/OCDB/TRD/Calib/DCS", year));
-  
+
   for (int i=0; i<res->GetEntries(); i++) {
-    
+
     int firstrun=0, lastrun=0,v=0,s=0;
     sscanf(res->GetFileName(i), "Run%d_%d_v%d_s%d.root",
 	   &firstrun, &lastrun, &v, &s);
-    
+
     // skip default entry, not associated with a run
     if (firstrun==0) continue;
 
@@ -137,7 +142,7 @@ void check_runs_alien(Int_t year, int minrun=0, int maxrun=999999999)
     // skip runs outside requested range
     if (firstrun < minrun) continue;
     if (firstrun > maxrun) continue;
-    
+
     check_run(firstrun);
   }
 
@@ -155,7 +160,7 @@ void check_runs(Int_t* runs)
 
 AliTRDCalDCSv2* get_caldcs(int run, int soreor=1)
 {
-  
+
   AliCDBManager* man = AliCDBManager::Instance();
   man->SetRun(run);
   AliCDBEntry *entry = man->Get("TRD/Calib/DCS");
@@ -167,7 +172,7 @@ AliTRDCalDCSv2* get_caldcs(int run, int soreor=1)
   }
 
   TObjArray* objarr = (TObjArray*)entry->GetObject();
-  
+
   return (AliTRDCalDCSv2*) objarr->At(soreor);
 }
 
@@ -184,7 +189,7 @@ bool check_run(int run)
   int nerr = 0;
 
   TString soreor[] = {"SOR", "EOR"};
-  
+
   for (int i=0; i<2; i++) {
     AliTRDCalDCSv2 *caldcs  = (AliTRDCalDCSv2 *)objArrayCDB->At(i);
 
@@ -201,7 +206,7 @@ bool check_run(int run)
   if (nerr == 0) {
     cout << "run " << run << ": ok" << endl;
   }
-  
+
   return (nerr > 0);
 }
 
@@ -217,7 +222,7 @@ void runinfo(int run)
       AliTRDCalDCSFEEv2 *fee = c->GetCalDCSFEEObj(i);
       if(fee == NULL) continue;
       if(fee->GetStatusBit() != 0) continue;
-      
+
       cout << fee->GetNumberOfTimeBins() << " "
 	   << fee->GetConfigTag() << " "
 	   << fee->GetSingleHitThres() << " "
@@ -236,11 +241,11 @@ void runinfo(int run)
 	   << fee->GetTrackletDef() << " "
 	   << fee->GetTriggerSetup() << " "
 	   << fee->GetAddOptions() << endl;
-      
+
 
     }
   }
-  
+
 }
 
 
@@ -250,7 +255,7 @@ void fix_mixed_config(Int_t run, TString jira)
 
   // figure out who is to blame for the patch
   TString responsible = "";
-  
+
   if (gSystem->GetUserInfo()->fRealName == "Tom Dietel" ||
       gSystem->GetUserInfo()->fRealName == "Thomas Dietel" ) {
 
@@ -261,7 +266,7 @@ void fix_mixed_config(Int_t run, TString jira)
 	 << "Please update AliTRDocdbTools.C" << endl;
     return;
   }
-  
+
   // Get OCDB entry
   AliCDBManager* man = AliCDBManager::Instance();
   man->SetRun(run);
@@ -272,7 +277,7 @@ void fix_mixed_config(Int_t run, TString jira)
 
   //cout << caldcsSOR->GetGlobalConfigName() << endl;
   //cout << caldcsEOR->GetGlobalConfigName() << endl;
-  
+
   // Fix mixed configuration
   if( caldcsSOR->GetGlobalConfigName().Contains("mixed") ||
       caldcsSOR->GetGlobalConfigVersion().Contains("mixed") ||
@@ -290,7 +295,7 @@ void fix_mixed_config(Int_t run, TString jira)
     md->SetComment((TString)md->GetComment()
 		   + " Fix for mixed config Jira " + jira);
 
-    
+
     // Store locally
     AliCDBStorage *locStore = man->GetStorage("local://OCDB");
     locStore->Put(objArrayCDB,id,md);
@@ -305,7 +310,7 @@ void fix_mixed_config(Int_t* runs, TString jira)
 }
 
 
-//// List all runs in a given year. 
+//// List all runs in a given year.
 //void list_runs(Int_t year) {
 //
 //  // Run ranges will have to be updated every year, refer to file
